@@ -81,6 +81,28 @@ The runner builds fixed and recursive LangChain chunks, evaluates BM25, dense,
 and hybrid RRF retrieval, collapses chunk scores to SciDocs parent documents, and
 writes chunk manifests, rankings, per-run metrics, timing, and a CSV summary under
 `results/scidocs/<session-id>/`.
+
+## QASPER generation benchmark
+
+Install the generation dependency and prepare a small validation smoke sample:
+
+```bash
+pip install -e ".[generation]"
+rag-generation prepare \
+  --split validation \
+  --limit-papers 5 \
+  --output-dir data/generation/qasper-v1
+```
+
+Remove `--limit-papers` to normalize the complete validation split. The command
+creates one case per QASPER question, preserves all reference annotations, maps
+annotated evidence to stable passage IDs, and writes a checksummed manifest.
+Downloaded data and normalized cases remain under the ignored `data/` directory.
+
+The generation experiment runner is under active implementation. Its design uses
+separate oracle-evidence and complete-paper tracks so answer quality and abstention
+are not conflated.
+
 ## Evaluation design
 
 
@@ -230,16 +252,25 @@ cost, memory, and index-size thresholds on the held-out set.
 
 ### Phase 3. Evaluate generation with fixed context
 
-- [ ] Create a generation-only runner that bypasses retrieval and supplies the
+Detailed execution contract: [Phase 3 fixed-context generation specification](benchmark_spec.md#16-phase-3-purpose-and-diagnostic-boundary).
+
+- [x] Use QASPER questions, answers, evidence, and answerability annotations.
+- [x] Normalize QASPER into checksummed, versioned generation cases.
+- [ ] Complete a generation-only runner that bypasses retrieval and supplies the
   same gold passages to every model.
-- [ ] Freeze the prompt template, context order, token budget, decoding settings,
+- [x] Define and implement the structured prompt and response contract.
+- [ ] Freeze context eligibility, decoding settings,
   model version, and output schema.
-- [ ] Require a structured response containing the answer, citations, and an
+- [x] Pin an immutable QASPER Parquet revision.
+- [x] Download and normalize the complete QASPER validation split.
+- [ ] Run both oracle-evidence and complete-paper fixed-context tracks.
+- [x] Require a structured response containing the answer, citations, and an
   abstention indicator.
-- [ ] Measure answer correctness against required facts and reference answers.
+- [ ] Measure answer correctness against QASPER reference answers.
 - [ ] Measure faithfulness by checking that each material claim is supported by
   the supplied context.
-- [ ] Measure completeness as the proportion of required facts covered.
+- [ ] Measure rubric completeness against the references and context. QASPER does
+  not contain atomic required-fact annotations.
 - [ ] Measure citation precision, citation recall, and whether each citation
   supports the associated claim.
 - [ ] Test appropriate abstention using both answerable and unanswerable

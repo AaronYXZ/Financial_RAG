@@ -21,6 +21,9 @@ benchmark = [
     "sentence-transformers>=3.0,<6",
     "transformers>=4.41,<6",
 ]
+generation = [
+    "datasets>=3.0,<5",
+]
 dev = [
     "pytest>=8.0",
 ]
@@ -28,6 +31,7 @@ dev = [
 [project.scripts]
 rag-eval = "rag_eval.cli:main"
 rag-benchmark = "rag_eval.benchmark_cli:main"
+rag-generation = "rag_eval.generation_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

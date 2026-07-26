@@ -1,11 +1,14 @@
-# SciDocs Retrieval Benchmark Specification
+# RAG Benchmark Specification
 
 ## 1. Purpose
 
-This specification defines Phase 2 of the RAG benchmark: evaluate how chunking
-and retrieval choices affect evidence discovery before generation is introduced.
-It compares two LangChain chunking strategies across lexical, dense, and hybrid
-retrieval on SciDocs.
+This specification covers two diagnostic layers of the RAG benchmark. Sections
+1 through 15 define Phase 2 retrieval evaluation. Sections 16 onward define Phase
+3 generation evaluation with fixed context.
+
+Phase 2 evaluates how chunking and retrieval choices affect evidence discovery
+before generation is introduced. It compares two LangChain chunking strategies
+across lexical, dense, and hybrid retrieval on SciDocs.
 
 The benchmark answers:
 
@@ -16,7 +19,7 @@ The benchmark answers:
 4. Does recursive chunking improve retrieval over fixed token windows when every
    other component is held constant?
 
-This phase does not evaluate answer generation, faithfulness, or citations.
+Phase 2 does not evaluate answer generation, faithfulness, or citations.
 
 ## 2. Scope and fixed decisions
 
@@ -45,7 +48,7 @@ The official BEIR inventory lists SciDocs as a test-only dataset with approximat
 actual counts after download rather than treating the rounded inventory values as
 validation constants. See the [BEIR dataset inventory](https://github.com/beir-cellar/beir#available-datasets).
 
-## 3. Non-goals
+## 3. Phase 2 non-goals
 
 - Do not compare generation models or prompts.
 - Do not add a reranker in the primary experiment matrix.
@@ -513,3 +516,477 @@ limits for the intended deployment environment.
 - [ ] Run 128-token sensitivity analysis only if the 90 percent single-chunk rule
   is triggered.
 - [ ] Complete error analysis and write the Phase 2 comparison report.
+
+## 16. Phase 3 purpose and diagnostic boundary
+
+Phase 3 evaluates generation independently from retrieval. The runner must bypass
+chunk search, BM25, dense retrieval, hybrid fusion, and reranking. Every generator
+receives the same versioned context for a given case and track.
+
+The benchmark answers:
+
+1. Can the generator answer correctly when annotated evidence is supplied?
+2. Does it limit material claims to information supported by the context?
+3. Are citations valid and do they identify the annotated evidence?
+4. Does it abstain when a complete paper does not answer the question?
+5. What latency, token, cost, and reliability tradeoffs does each generator create?
+
+A failure in this phase is attributed to generation, prompt handling, citation
+construction, output parsing, or evaluation. It is not a retrieval failure because
+retrieval is never executed.
+
+## 17. QASPER data contract
+
+### 17.1 Source and version
+
+Use the Hugging Face dataset `allenai/qasper`, configuration `qasper`, as the
+Phase 3 corpus and QA source. QASPER version 0.3.0 contains 1,585 NLP papers and
+5,049 information-seeking questions. Its license is CC BY 4.0.
+
+Pin and record all of the following in each run manifest:
+
+- dataset name and configuration
+- dataset revision or immutable snapshot identifier
+- QASPER builder version
+- split
+- normalized case-file SHA-256
+- loader source revision
+- schema version
+
+The Hugging Face paper-level split sizes are 888 train, 281 validation, and 416
+test rows. Do not repartition papers or allow the same paper to cross splits.
+
+### 17.2 Split policy
+
+- `train`: prompt development, evaluator development, and debugging only
+- `validation`: generator selection, threshold calibration, and reported
+  development comparisons
+- `test`: one held-out final comparison after the protocol is frozen
+
+Do not inspect test outputs while changing prompts, rubrics, context policy,
+decoding settings, or evaluator thresholds.
+
+### 17.3 Case normalization
+
+Flatten each paper into one generation case per QASPER question. Preserve all
+human answer annotations rather than collapsing them to a single reference.
+
+Each normalized case must contain:
+
+| Field | Requirement |
+|---|---|
+| `case_id` | QASPER `question_id` |
+| `split` | original QASPER split |
+| `paper_id` | QASPER paper `id` |
+| `title` | paper title |
+| `question` | question text |
+| `answerability` | `answerable`, `unanswerable`, or `ambiguous` |
+| `paper_passages` | ordered title, abstract, section, paragraph, and float records |
+| `oracle_passage_ids` | ordered union of resolved evidence IDs from answerable annotations |
+| `references` | every answer annotation and its evidence |
+
+Create stable passage IDs from the paper ID, passage kind, and document order.
+Normalize whitespace for matching only. Preserve normalized source text in the
+case file and never use generated paraphrases as evidence.
+
+QASPER can expose nested sequence fields as either lists of records or records of
+lists. The loader must accept both representations and produce identical cases.
+
+### 17.4 Reference-answer normalization
+
+Map each annotation to exactly one answer type using this precedence:
+
+1. `unanswerable` when the annotation marks the question unanswerable
+2. `extractive` when one or more extractive spans exist
+3. `free_form` when a non-empty free-form answer exists
+4. `yes_no` when the yes/no value is not null
+5. `missing` otherwise, which is a validation error for reportable cases
+
+For extractive answers, join spans in annotation order for text-based scoring.
+Retain the original span list in raw source snapshots when available. Retain
+each annotation's paragraph evidence and highlighted evidence separately.
+
+### 17.5 Answerability and disagreement
+
+Assign case answerability from all annotations:
+
+- `answerable` when every annotation is answerable
+- `unanswerable` when every annotation is unanswerable
+- `ambiguous` when annotations disagree
+
+Use only unanimous cases for the primary abstention metrics. Report ambiguous
+cases as a separate disagreement slice. Never force them into either binary class.
+
+### 17.6 Evidence resolution
+
+Resolve annotation evidence against normalized title, abstract, section header,
+paragraph, and figure/table caption records using exact whitespace-normalized
+matching. Preserve document order and deduplicate passage IDs.
+
+Do not silently discard unmatched evidence. Store unresolved strings on the
+reference annotation, report their count in the preparation manifest, and fail a
+reportable oracle run if any answerable case has no resolved evidence. Any fuzzy
+matching policy must be separately versioned, tested, and audited before use.
+
+## 18. Fixed-context tracks
+
+### 18.1 Track A: oracle evidence
+
+Purpose: isolate answer correctness, groundedness, and citation behavior when the
+annotated evidence is present.
+
+- Include `answerable` cases only in the primary Track A score.
+- Supply the ordered union of evidence passages from every answerable annotation.
+- Use the same passage order and IDs for every generator.
+- Do not retrieve, rerank, summarize, paraphrase, or model-select passages.
+- Report ambiguous cases separately if they are run.
+
+Track A is not an abstention benchmark. An unanswerable QASPER annotation has no
+gold evidence, so supplying an empty context would make abstention artificially
+easy.
+
+### 18.2 Track B: complete paper
+
+Purpose: evaluate answering and abstention under QASPER's intended full-paper
+setting without retrieval.
+
+- Include unanimous answerable and unanimous unanswerable cases.
+- Supply the complete normalized paper in document order.
+- Include title, abstract, section headers, paragraphs, and available figure/table
+  captions.
+- Do not silently truncate, summarize, or omit passages.
+- Exclude a paper when its complete serialized prompt exceeds the smallest context
+  window among compared generators.
+- Freeze the eligible paper list before running any generator and report excluded
+  paper and case counts.
+
+The common eligible subset is the primary cross-model Track B comparison. A
+secondary per-model coverage result may use each model's full context window, but
+it must not be used to rank models because the evaluated cases differ.
+
+### 18.3 Context serialization
+
+Serialize each passage exactly as:
+
+```text
+[<passage_id>]
+<passage_text>
+```
+
+Separate passages with two newline characters. Hash the exact system and user
+prompt bytes after serialization. Persist the context passage IDs and prompt hash
+with every prediction.
+
+## 19. Prompt and response contract
+
+Freeze one system prompt before the reportable validation run:
+
+```text
+Answer the question using only the supplied context.
+If the context does not support an answer, abstain.
+Every factual answer must cite one or more supplied passage IDs.
+Return exactly one JSON object with keys answer, abstain, citations, and confidence.
+Do not include markdown or additional text.
+```
+
+The response schema is:
+
+```json
+{
+  "answer": "string",
+  "abstain": false,
+  "citations": ["paper-id::paragraph::0001"],
+  "confidence": 0.0
+}
+```
+
+Validation rules:
+
+- the object has exactly the four declared keys
+- `confidence` is numeric and in `[0, 1]`
+- citations contain only passage IDs present in the supplied context
+- a non-abstaining answer is non-empty and has at least one citation
+- an abstention has an empty answer and no citations
+- invalid output is recorded as an invalid response, not silently repaired
+
+One deterministic format-repair retry may be reported separately. Primary quality
+metrics use the first response.
+
+## 20. Generator controls
+
+Hold constant across a controlled generator comparison:
+
+- QASPER case file and eligible-case list
+- fixed-context track
+- prompt text and prompt hash
+- passage order and serialization
+- tokenizer accounting method
+- maximum output tokens
+- temperature, top-p, seed, and stop conditions where supported
+- response parser and retry policy
+- evaluator versions and thresholds
+
+Record provider, exact model identifier, model revision when available, context
+window, API or runtime version, hardware for local models, and execution time.
+If a provider silently updates a model behind an alias, treat results from the new
+date as a different configuration.
+
+Recommended deterministic defaults are temperature `0`, top-p `1`, one sample,
+and no hidden conversation history. If a model does not support a parameter,
+record that fact rather than emulating unsupported behavior.
+
+## 21. Pre-registered experiment matrix
+
+The primary matrix is:
+
+| Factor | Values |
+|---|---|
+| Data | QASPER validation, then held-out test once |
+| Context track | Track A oracle evidence, Track B complete paper |
+| Generator | explicit versioned model IDs, selected before the run |
+| Prompt | one frozen prompt hash |
+| Decoding | deterministic defaults in Section 20 |
+| Repetitions | one primary run, three only for nondeterministic systems |
+
+Compare one factor at a time. Prompt variants and decoding sweeps are development
+experiments and must not be mixed into the primary model comparison.
+
+## 22. Metrics
+
+### 22.1 Deterministic answer quality
+
+Normalize candidate and reference text using the published QASPER evaluation
+normalization. Score against every reference annotation and take the maximum
+reference score per case.
+
+Report:
+
+- token F1 as the primary deterministic answer metric
+- exact match as a strict secondary metric
+- answer-type slices for extractive, free-form, and yes/no questions
+
+Do not substitute ROUGE or embedding similarity as the primary correctness metric.
+
+### 22.2 Abstention
+
+On unanimous Track B cases, report:
+
+- answerability accuracy
+- precision, recall, and F1 for abstention
+- false-answer rate on unanswerable cases
+- false-abstention rate on answerable cases
+- risk-coverage curve and area under the curve using declared confidence
+- expected calibration error with bins frozen on validation
+
+Report class counts with every aggregate. Ambiguous cases are excluded from the
+primary binary metrics and reported separately.
+
+### 22.3 Citations and evidence
+
+For non-abstaining answers, compare cited passage IDs with each reference
+annotation's evidence set and use the best matching reference for that case.
+
+Report:
+
+- citation precision
+- citation recall
+- citation F1
+- citation validity rate
+- proportion of answered cases with at least one citation
+
+Evidence overlap alone does not prove that a citation supports the generated
+claim. Add a claim-level support evaluator and human audit as described below.
+
+### 22.4 Faithfulness and completeness
+
+Split each candidate answer into material claims. A blinded rubric evaluator must
+label every claim as `supported`, `contradicted`, or `not_in_context`, with cited
+passage IDs and a short rationale.
+
+Report:
+
+- supported-claim rate
+- contradicted-claim rate
+- unsupported-claim rate
+- case-level fully faithful rate
+- rubric correctness and completeness on a `0` to `4` scale
+
+QASPER does not provide atomic required-fact annotations. Do not describe rubric
+completeness as exact required-fact recall unless a separately versioned human
+annotation layer is created.
+
+### 22.5 Efficiency and reliability
+
+Measure only reportable attempts and disclose retry accounting. Report:
+
+- input, output, and total tokens
+- time to first token when available
+- end-to-end generation latency p50, p95, and p99
+- estimated cost per case and per 1,000 cases
+- invalid-response, timeout, provider-error, and retry rates
+- peak memory for local inference when measurable
+
+## 23. Evaluator protocol
+
+Use deterministic metrics first. A rubric evaluator supplements them for semantic
+correctness, claim support, and completeness.
+
+The evaluator input contains only the question, supplied context, references,
+candidate answer, and anonymous citations. It must not contain generator names,
+prices, latency, or prior scores. Freeze the evaluator model ID, prompt hash,
+temperature, output schema, and parsing policy.
+
+Randomize candidate order when pairwise judging is used and run a position-swap
+subset. Report evaluator failures separately. A generator must not judge its own
+outputs in the only semantic evaluation path.
+
+## 24. Human audit
+
+Before accepting automated rubric results, manually review at least 100 validation
+cases, stratified by track, answerability, answer type, generator, and automated
+score band. Oversample disagreements, unsupported-claim flags, invalid citations,
+false answers, and false abstentions.
+
+Use two independent reviewers for at least 20 percent of the audit. Report raw
+agreement and Cohen's kappa for categorical labels. Reconcile rubric or evaluator
+thresholds before the held-out test run, not after seeing test results.
+
+## 25. Statistical reporting
+
+Report macro means over cases and paired bootstrap 95 percent confidence intervals
+with at least 10,000 paper-clustered resamples. Cluster by `paper_id` because
+questions from the same paper are not independent.
+
+For pairwise model comparisons, bootstrap the paired per-case difference and
+report the interval and win probability. Treat overlapping intervals as
+inconclusive. Do not select a model from a negligible quality difference without
+considering latency, cost, reliability, and context coverage.
+
+## 26. Artifacts and reproducibility
+
+Store Phase 3 artifacts under `results/generation/qasper-v1/`:
+
+```text
+results/generation/qasper-v1/
+  manifests/
+    data.<split>.json
+    experiment.<run_id>.json
+  cases/
+    <split>.cases.jsonl
+    <split>.eligible_case_ids.json
+  prompts/
+    system.txt
+    prompt_manifest.json
+  predictions/
+    <run_id>.jsonl
+  judgments/
+    <run_id>.jsonl
+  metrics/
+    <run_id>.json
+  audits/
+    human_audit.csv
+  reports/
+    phase3_comparison.md
+```
+
+Each prediction row must include run ID, case ID, paper ID, split, track, model
+identifier, context passage IDs, prompt hash, raw response, parsed response,
+validation errors, token counts, latency, retry count, and estimated cost.
+
+Generated data, provider payloads, and model outputs may contain licensed or
+sensitive material. Keep large artifacts out of Git and publish only what the
+QASPER license and provider terms permit.
+
+## 27. Required validations
+
+### 27.1 Data tests
+
+- both Hugging Face nested sequence representations normalize identically
+- case IDs are unique within a split
+- every case maps to exactly one paper and original split
+- passage IDs are unique and document ordered
+- every cited oracle passage exists in the case paper
+- unresolved evidence is counted and never silently discarded
+- mixed answerability annotations are labeled `ambiguous`
+- yes/no `false` is normalized to `No`, not treated as missing
+
+### 27.2 Context and prompt tests
+
+- Track A includes only annotated evidence IDs
+- Track B serializes every normalized paper passage exactly once
+- complete-paper eligibility is computed before model execution
+- prompt serialization and hash are deterministic
+- different generators receive byte-identical prompts for a case and track
+- no retrieval or reranking component is called
+
+### 27.3 Response and metric tests
+
+- malformed JSON and extra keys fail validation
+- out-of-context citation IDs fail validation
+- abstentions cannot contain answer text or citations
+- non-abstaining answers require text and citations
+- QASPER answer normalization matches official evaluator fixtures
+- citation precision and recall handle multiple reference evidence sets
+- paper-clustered bootstrap resampling is deterministic under a fixed seed
+
+## 28. Error analysis
+
+Review at least:
+
+- 20 lowest token-F1 Track A cases
+- 20 supported-answer failures despite resolved oracle evidence
+- 20 citation precision or recall failures
+- every false answer on a unanimous unanswerable Track B case, up to 50
+- 20 false abstentions on answerable Track B cases
+- 20 evaluator-human disagreements
+- all invalid responses when there are fewer than 50, otherwise a stratified 50
+
+Use a fixed taxonomy: reference disagreement, answer-type normalization, evidence
+resolution, missed evidence use, unsupported inference, contradiction, incomplete
+answer, citation mismatch, inappropriate abstention, invalid schema, context-window
+exclusion, evaluator error, and other with notes.
+
+## 29. Selection and exit criteria
+
+Choose the generator only after reviewing quality, faithfulness, citations,
+abstention, efficiency, reliability, and eligible context coverage together.
+
+Phase 3 is complete when:
+
+- QASPER data and normalized case manifests are versioned and checksummed
+- the two context tracks and eligible-case lists are frozen
+- prompts and generator configurations are versioned
+- Track A and Track B metrics include paper-clustered confidence intervals
+- invalid outputs, retries, errors, latency, tokens, and cost are reported
+- automated rubric judgments pass the human-agreement audit
+- required error analysis is complete
+- one generator configuration and rejected alternatives have documented reasons
+
+Numeric release thresholds must be set from product requirements after the first
+validation baseline. Do not invent acceptance thresholds after viewing test data.
+
+## 30. Phase 3 implementation action items
+
+- [x] Add the QASPER optional dependency and `rag-generation` CLI entry point.
+- [x] Implement QASPER loading for both nested sequence representations.
+- [x] Flatten paper rows into versioned question cases.
+- [x] Normalize answer types, answerability disagreement, and evidence IDs.
+- [x] Preserve unresolved evidence and report it in the data manifest.
+- [x] Implement deterministic prompt rendering, hashing, and strict response parsing.
+- [x] Add unit tests for loader, context selection, and response validation.
+- [x] Pin the QASPER Parquet export to an immutable repository commit.
+- [ ] Record or verify the downloaded source Parquet checksum.
+- [x] Download and normalize the complete validation split.
+- [ ] Download and normalize the train split for prompt development.
+- [x] Implement Track A and Track B deterministic case selection.
+- [ ] Implement shared context-window eligibility before model execution.
+- [ ] Port or verify the published QASPER answer normalization and token F1.
+- [ ] Implement generator adapters and the experiment runner.
+- [ ] Persist raw and parsed prediction JSONL with resume support.
+- [ ] Implement citation, abstention, calibration, latency, token, and cost metrics.
+- [ ] Implement paper-clustered bootstrap confidence intervals.
+- [ ] Add the blinded claim-support and completeness evaluator.
+- [ ] Complete the stratified human-audit workflow.
+- [ ] Run validation baselines and freeze thresholds.
+- [ ] Run the held-out test comparison once.
+- [ ] Complete error analysis and publish the Phase 3 comparison report.
