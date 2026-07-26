@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import random
 import shutil
@@ -14,6 +15,10 @@ from pathlib import Path
 BEIR_DATASET_URL = (
     "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{dataset}.zip"
 )
+
+BEIR_DATASET_MD5 = {
+    "scidocs": "38121350fc3a4d2f48850f6aff52e4a9",
+}
 
 
 @dataclass(frozen=True)
@@ -35,6 +40,10 @@ def download_dataset(dataset: str, data_dir: Path) -> Path:
     try:
         with urllib.request.urlopen(url) as response, archive.open("wb") as target:
             shutil.copyfileobj(response, target)
+        expected_md5 = BEIR_DATASET_MD5.get(dataset)
+        actual_md5 = _file_md5(archive)
+        if expected_md5 and actual_md5 != expected_md5:
+            raise ValueError(f"Checksum mismatch for downloaded BEIR dataset: {dataset}")
         with zipfile.ZipFile(archive) as zip_file:
             _safe_extract(zip_file, data_dir)
     except Exception:
@@ -155,3 +164,11 @@ def _safe_extract(archive: zipfile.ZipFile, destination: Path) -> None:
         if not target.is_relative_to(destination):
             raise ValueError(f"Unsafe archive member: {member.filename}")
     archive.extractall(destination)
+
+
+def _file_md5(path: Path) -> str:
+    digest = hashlib.md5(usedforsecurity=False)
+    with path.open("rb") as file:
+        for block in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()

@@ -110,13 +110,13 @@ For each parent document:
    enrichment.
 6. Split only within a parent document. Never create a chunk spanning documents.
 
-Split the body in `text`. Prefix every non-empty chunk with the title for indexing:
+Construct one source string, then split the complete source within the token limit:
 
 ```text
-{title}\n\n{body_chunk}
+{title}\n\n{text}
 ```
 
-This title policy must be identical for both chunkers and all retrievers.
+This source construction must be identical for both chunkers and all retrievers.
 
 ## 5. LangChain chunking strategies
 
@@ -129,18 +129,19 @@ and recommends recursive splitting as a general-purpose starting point.
 
 | Parameter | Value |
 | --- | ---: |
-| Target chunk size | 256 tokens |
+| Model input ceiling | 256 tokens |
+| Effective splitter budget | 248 tokens |
 | Chunk overlap | 32 tokens |
 | Tokenizer | Tokenizer for `sentence-transformers/all-MiniLM-L6-v2` |
 | Keep empty chunks | No |
 | Add start index | Yes |
-| Title policy | Prefix title to every body chunk after splitting |
+| Source policy | Split the combined title and body source |
 | Chunk order | Original document order |
 
-The overlap is 12.5 percent of the target size. The splitter must count only the
-body against the 256-token target. After prefixing the title, validate the final
-input against the dense model token limit and record any truncation. The target
-is invalid if any indexed chunk is silently truncated.
+Reserve eight tokens for special tokens and decode-then-encode variation observed
+in sentence-transformer token splitting. Validate every final chunk against the
+256-token dense model ceiling. The benchmark is invalid if any indexed chunk is
+silently truncated.
 
 Because SciDocs records may be shorter than the target size, also report:
 
@@ -168,7 +169,7 @@ from langchain_text_splitters import SentenceTransformersTokenTextSplitter
 
 splitter = SentenceTransformersTokenTextSplitter(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
-    tokens_per_chunk=256,
+    tokens_per_chunk=248,
     chunk_overlap=32,
     add_start_index=True,
 )
@@ -194,7 +195,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
     tokenizer=tokenizer,
-    chunk_size=256,
+    chunk_size=248,
     chunk_overlap=32,
     separators=["\n\n", "\n", ". ", " ", ""],
     add_start_index=True,
@@ -250,7 +251,7 @@ Use the repository's Okapi BM25 implementation with:
 | --- | ---: |
 | `k1` | 1.5 |
 | `b` | 0.75 |
-| Text | title-prefixed chunk |
+| Text | combined-source chunk |
 | Tokenization | Unicode-aware case-folded word tokens |
 
 Do not tune BM25 parameters during the primary matrix.
@@ -262,7 +263,7 @@ Use:
 | Parameter | Value |
 | --- | --- |
 | Model | `sentence-transformers/all-MiniLM-L6-v2` |
-| Document input | title-prefixed chunk |
+| Document input | combined-source chunk |
 | Query input | original SciDocs query text |
 | Normalization | L2 normalize document and query embeddings |
 | Similarity | cosine similarity via normalized dot product |
@@ -436,11 +437,11 @@ The runner must fail before retrieval if any check fails:
 - fewer than K unique documents are returned when the corpus has at least K
   documents
 - final dense input is silently truncated
-- paired runs use different query sets, corpus versions, K values, or title policy
+- paired runs use different query sets, corpus versions, K values, or source policy
 - a reportable run uses a sampled corpus
 
 Add unit tests for fixed chunk overlap, recursive boundaries, deterministic chunk
-IDs, title prefixing, parent collapse, tie-breaking, and hybrid fusion after parent
+IDs, combined-source construction, parent collapse, tie-breaking, and hybrid fusion after parent
 collapse.
 
 ## 13. Error analysis

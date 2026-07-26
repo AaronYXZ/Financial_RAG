@@ -15,12 +15,19 @@ dense = [
     "numpy>=1.26",
     "sentence-transformers>=3.0",
 ]
+benchmark = [
+    "langchain-text-splitters>=1.0,<2",
+    "numpy>=1.26",
+    "sentence-transformers>=3.0,<6",
+    "transformers>=4.41,<6",
+]
 dev = [
     "pytest>=8.0",
 ]
 
 [project.scripts]
 rag-eval = "rag_eval.cli:main"
+rag-benchmark = "rag_eval.benchmark_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

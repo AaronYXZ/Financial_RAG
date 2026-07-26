@@ -56,7 +56,33 @@ rag-eval --dataset scifact --retriever hybrid --max-documents 2000 --max-queries
 The default dense model is `sentence-transformers/all-MiniLM-L6-v2`. Override it
 with `--model`.
 
+## SciDocs chunking benchmark
+
+Install the benchmark dependencies and download SciDocs:
+
+```bash
+pip install -e ".[benchmark]"
+rag-benchmark --download-only
+```
+
+Run a small smoke experiment before the full matrix:
+
+```bash
+rag-benchmark --max-documents 2000 --max-queries 25 --repetitions 1 --k 1,3,5,10
+```
+
+Run the reportable fixed-versus-recursive matrix on the full corpus:
+
+```bash
+rag-benchmark
+```
+
+The runner builds fixed and recursive LangChain chunks, evaluates BM25, dense,
+and hybrid RRF retrieval, collapses chunk scores to SciDocs parent documents, and
+writes chunk manifests, rankings, per-run metrics, timing, and a CSV summary under
+`results/scidocs/<session-id>/`.
 ## Evaluation design
+
 
 BEIR datasets have three important pieces:
 
@@ -177,24 +203,26 @@ test split.
 
 ### Phase 2. Establish retrieval baselines
 
+Detailed execution contract: [SciDocs Retrieval Benchmark Specification](benchmark_spec.md).
+
 - [x] Implement BM25, dense, and hybrid retrieval.
 - [x] Implement Precision@K, Recall@K, MRR@K, and NDCG@K.
 - [x] Record total retrieval time, time per query, configuration, sample size, and
   Python version.
-- [ ] Run BM25 on a fixed development sample and save it as the lexical baseline.
-- [ ] Run dense and hybrid retrieval on the identical queries, corpus, K values,
+- [x] Run BM25 on a fixed development sample and save it as the lexical baseline.
+- [x] Run dense and hybrid retrieval on the identical queries, corpus, K values,
   and seed.
-- [ ] Add warm-up runs and report p50, p95, and p99 latency separately from index
+- [x] Add warm-up runs and report p50, p95, and p99 latency separately from index
   construction time.
 - [ ] Record embedding cost, query cost, peak memory, and on-disk index size.
-- [ ] Save ranked passage IDs and scores for every query, not only aggregate
+- [x] Save ranked passage IDs and scores for every query, not only aggregate
   metrics.
 - [ ] Report bootstrap confidence intervals and per-slice results in addition to
   macro averages.
 - [ ] Inspect false negatives from the worst queries and classify causes such as
   vocabulary mismatch, bad chunk boundaries, metadata filtering, multi-hop
   evidence, or stale content.
-- [ ] Repeat the selected configuration on the full corpus before reporting final
+- [x] Repeat the selected configuration on the full corpus before reporting final
   retrieval results.
 
 **Exit gate:** the selected retriever meets the agreed `Recall@K`, tail-latency,
