@@ -103,6 +103,57 @@ The generation experiment runner is under active implementation. Its design uses
 separate oracle-evidence and complete-paper tracks so answer quality and abstention
 are not conflated.
 
+Execution walkthrough: [generation smoke-test execution flow](generation_smoke_test_execution.md).
+
+For the Apple Silicon baseline, serve the 4-bit MLX model in one terminal:
+
+```bash
+pip install mlx-lm
+mlx_lm.server --model mlx-community/Qwen3-4B-Instruct-2507-4bit
+```
+
+The server listens on `http://127.0.0.1:8080` by default. It is intended only as
+a local benchmark endpoint. In a second terminal, run the 25-case oracle-evidence
+smoke test:
+
+```bash
+rag-generation run \
+  --track oracle-evidence \
+  --max-cases 25 \
+  --max-context-tokens 32768 \
+  --max-output-tokens 512
+```
+
+The runner calls the server's OpenAI-compatible chat endpoint sequentially,
+counts tokens with the original Qwen tokenizer, rejects prompts that exceed the
+shared context limit, validates the strict JSON response, and appends predictions
+to `results/generation/qasper-v1/predictions/qwen3-4b-smoke.jsonl`. Repeating the
+command resumes from existing case, track, and model records. It also writes
+`qwen3-4b-smoke.eligibility.json`, which freezes the eligible case IDs used as
+the metric denominator. Use `--no-resume` to overwrite the output.
+
+After the generation run, calculate Stage 0 to 2 metrics:
+
+```bash
+rag-generation metrics
+```
+
+The command joins cases and predictions by `case_id`, scores every eligible case,
+and writes:
+
+```text
+results/generation/qasper-v1/metrics/qwen3-4b-smoke/
+  evaluation_records.jsonl
+  per_case_metrics.jsonl
+  summary.json
+```
+
+The summary includes response-status rates, retries, latency, token usage, local
+inference cost, official QASPER token F1, and normalized exact match. Missing and
+invalid predictions remain in the denominator and receive zero answer quality.
+Citation, abstention, calibration, bootstrap, and rubric metrics remain future
+stages.
+
 ## Evaluation design
 
 

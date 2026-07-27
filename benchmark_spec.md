@@ -979,11 +979,13 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
 - [x] Download and normalize the complete validation split.
 - [ ] Download and normalize the train split for prompt development.
 - [x] Implement Track A and Track B deterministic case selection.
-- [ ] Implement shared context-window eligibility before model execution.
-- [ ] Port or verify the published QASPER answer normalization and token F1.
-- [ ] Implement generator adapters and the experiment runner.
-- [ ] Persist raw and parsed prediction JSONL with resume support.
-- [ ] Implement citation, abstention, calibration, latency, token, and cost metrics.
+- [x] Implement shared context-window eligibility before model execution.
+- [x] Freeze eligible case IDs as the denominator for each run configuration.
+- [x] Port and test the published QASPER answer normalization and token F1.
+- [x] Implement the minimum local HTTP adapter and sequential experiment runner.
+- [x] Persist raw and parsed prediction JSONL with resume support.
+- [x] Implement failure-rate, retry, latency, token, and local-cost metrics.
+- [ ] Implement citation, abstention, and calibration metrics.
 - [ ] Implement paper-clustered bootstrap confidence intervals.
 - [ ] Add the blinded claim-support and completeness evaluator.
 - [ ] Complete the stratified human-audit workflow.

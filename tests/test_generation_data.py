@@ -1,4 +1,8 @@
-from rag_eval.generation_data import normalize_qasper_row, select_passages
+from rag_eval.generation_data import (
+    generation_case_from_dict,
+    normalize_qasper_row,
+    select_passages,
+)
 
 
 def _row():
@@ -62,6 +66,8 @@ def test_normalizes_column_oriented_qasper_row():
 
     assert answerable.case_id == "q1"
     assert answerable.answerability == "answerable"
+    assert generation_case_from_dict(answerable.to_dict()) == answerable
+
     assert answerable.references[0].text == "five points"
     assert answerable.references[0].unresolved_evidence == ()
     assert len(answerable.oracle_passage_ids) == 1

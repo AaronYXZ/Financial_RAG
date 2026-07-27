@@ -315,3 +315,34 @@ def select_passages(
 ) -> tuple[PaperPassage, ...]:
     wanted = set(passage_ids)
     return tuple(passage for passage in case.paper_passages if passage.passage_id in wanted)
+
+
+def generation_case_from_dict(payload: Mapping[str, Any]) -> GenerationCase:
+    """Reconstruct a normalized case from its persisted JSON representation."""
+
+    passages = tuple(PaperPassage(**item) for item in payload["paper_passages"])
+    references = tuple(
+        ReferenceAnswer(
+            annotation_id=item["annotation_id"],
+            answer_type=item["answer_type"],
+            text=item["text"],
+            unanswerable=item["unanswerable"],
+            extractive_spans=tuple(item["extractive_spans"]),
+            evidence_ids=tuple(item["evidence_ids"]),
+            evidence_texts=tuple(item["evidence_texts"]),
+            highlighted_evidence=tuple(item["highlighted_evidence"]),
+            unresolved_evidence=tuple(item["unresolved_evidence"]),
+        )
+        for item in payload["references"]
+    )
+    return GenerationCase(
+        case_id=payload["case_id"],
+        split=payload["split"],
+        paper_id=payload["paper_id"],
+        title=payload["title"],
+        question=payload["question"],
+        answerability=payload["answerability"],
+        paper_passages=passages,
+        oracle_passage_ids=tuple(payload["oracle_passage_ids"]),
+        references=references,
+    )
