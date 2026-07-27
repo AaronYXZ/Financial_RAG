@@ -302,7 +302,9 @@ def score_answer_record(record: EvaluationRecord) -> dict[str, Any]:
     if not reference_scores:
         raise ValueError(f"Case {record.case.case_id} has no reference answers")
     winning = max(reference_scores, key=lambda item: item["token_f1"])
+    citation_score = score_citation_record(record)
     return {
+        **citation_score,
         "case_id": record.case.case_id,
         "paper_id": record.case.paper_id,
         "track": record.track,
@@ -376,6 +378,7 @@ def evaluate_prediction_files(
         "model_id": model_id,
         "reliability_and_efficiency": reliability_and_efficiency(records),
         "answer_quality": aggregate_answer_quality(per_case),
+        "citation_quality": aggregate_citation_quality(per_case),
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -392,3 +395,148 @@ def _write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def citation_precision_recall_f1(
+    predicted_ids: Iterable[str],
+    reference_ids: Iterable[str],
+) -> dict[str, float]:
+    predicted = set(predicted_ids)
+    reference = set(reference_ids)
+    if not reference:
+        raise ValueError("Citation scoring requires at least one reference evidence ID")
+    overlap = len(predicted & reference)
+    precision = overlap / len(predicted) if predicted else 0.0
+    recall = overlap / len(reference)
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision + recall
+        else 0.0
+    )
+    return {
+        "citation_precision": precision,
+        "citation_recall": recall,
+        "citation_f1": f1,
+    }
+
+
+def score_citation_record(record: EvaluationRecord) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "response_mode": "invalid",
+        "citation_evaluable": False,
+        "citation_valid": False if record.status == "invalid_citation" else None,
+        "has_citation": None,
+        "citation_precision": None,
+        "citation_recall": None,
+        "citation_f1": None,
+        "winning_citation_annotation_id": None,
+        "reference_evidence_set_count": 0,
+        "missing_reference_evidence": False,
+        "citation_reference_scores": [],
+    }
+    response = (record.prediction or {}).get("parsed_response")
+    if record.status != "valid" or not isinstance(response, Mapping):
+        return result
+    if response["abstain"]:
+        result.update(
+            {
+                "response_mode": "abstain",
+                "citation_valid": None,
+                "has_citation": False,
+            }
+        )
+        return result
+
+    predicted_ids = tuple(dict.fromkeys(response["citations"]))
+    context_ids = set((record.prediction or {}).get("context_passage_ids") or ())
+    result.update(
+        {
+            "response_mode": "answer",
+            "citation_valid": all(item in context_ids for item in predicted_ids),
+            "has_citation": bool(predicted_ids),
+        }
+    )
+
+    reference_scores: list[dict[str, Any]] = []
+    for reference in record.case.references:
+        if not reference.evidence_ids:
+            continue
+        reference_scores.append(
+            {
+                "annotation_id": reference.annotation_id,
+                "reference_evidence_ids": list(reference.evidence_ids),
+                **citation_precision_recall_f1(
+                    predicted_ids,
+                    reference.evidence_ids,
+                ),
+            }
+        )
+
+    result["reference_evidence_set_count"] = len(reference_scores)
+    result["citation_reference_scores"] = reference_scores
+    if not reference_scores:
+        result["missing_reference_evidence"] = True
+        return result
+
+    winning = max(
+        reference_scores,
+        key=lambda item: (
+            item["citation_f1"],
+            item["citation_recall"],
+            item["citation_precision"],
+        ),
+    )
+    result.update(
+        {
+            "citation_evaluable": True,
+            "citation_precision": winning["citation_precision"],
+            "citation_recall": winning["citation_recall"],
+            "citation_f1": winning["citation_f1"],
+            "winning_citation_annotation_id": winning["annotation_id"],
+        }
+    )
+    return result
+
+
+def aggregate_citation_quality(
+    per_case: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    answered = [item for item in per_case if item["response_mode"] == "answer"]
+    abstained = [item for item in per_case if item["response_mode"] == "abstain"]
+    scorable = [item for item in answered if item["citation_evaluable"]]
+    invalid_citation_count = sum(
+        item["status"] == "invalid_citation" for item in per_case
+    )
+    validity_evaluable_count = len(answered) + invalid_citation_count
+    valid_citation_count = sum(item["citation_valid"] is True for item in answered)
+    answered_with_citation_count = sum(item["has_citation"] is True for item in answered)
+
+    def mean(field: str) -> float | None:
+        if not scorable:
+            return None
+        return sum(float(item[field]) for item in scorable) / len(scorable)
+
+    return {
+        "case_count": len(per_case),
+        "answered_case_count": len(answered),
+        "abstained_case_count": len(abstained),
+        "invalid_or_missing_response_count": len(per_case) - len(answered) - len(abstained),
+        "scorable_answered_case_count": len(scorable),
+        "missing_reference_evidence_case_count": sum(
+            item["missing_reference_evidence"] for item in answered
+        ),
+        "invalid_citation_case_count": invalid_citation_count,
+        "citation_validity_evaluable_count": validity_evaluable_count,
+        "citation_validity_rate": (
+            valid_citation_count / validity_evaluable_count
+            if validity_evaluable_count
+            else None
+        ),
+        "answered_with_citation_count": answered_with_citation_count,
+        "answered_with_citation_rate": (
+            answered_with_citation_count / len(answered) if answered else None
+        ),
+        "citation_precision": mean("citation_precision"),
+        "citation_recall": mean("citation_recall"),
+        "citation_f1": mean("citation_f1"),
+    }

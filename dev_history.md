@@ -1,5 +1,42 @@
 # Development History
 
+## 2026-07-26. Citation and evidence metrics, Stage 3
+
+### Implemented
+
+- Added citation precision, recall, and F1 for valid non-abstaining responses.
+- Compared predicted passage IDs independently with every human annotation's
+  non-empty `evidence_ids` set and retained the best citation-F1 match per case.
+- Added per-reference citation scores and the winning citation annotation ID to
+  `per_case_metrics.jsonl`.
+- Added aggregate citation quality, citation validity, answered-with-citation,
+  invalid-citation, abstention, and missing-reference-evidence counts to
+  `summary.json`.
+- Excluded abstentions and cases without resolved reference evidence from
+  citation precision, recall, and F1 averages while reporting their counts.
+- Added tests for multiple evidence sets, partial overlap, no overlap, empty
+  evidence, abstentions, and invalid citations.
+
+### Smoke-test result
+
+For the current 25-case oracle-evidence Qwen3 smoke run:
+
+- 22 valid answered cases were citation-scorable.
+- Citation precision was `0.9303`.
+- Citation recall was `0.8447`.
+- Citation F1 was `0.8601`.
+- Citation validity and answered-with-citation rates were `1.0`.
+- Three invalid-schema responses remained outside the citation-quality average
+  and visible in reliability reporting.
+
+### Next stage
+
+- Run the complete-paper Track B benchmark.
+- Implement answerability accuracy, abstention precision, recall, and F1, plus
+  false-answer and false-abstention rates.
+- Add risk-coverage and calibration metrics after freezing their correctness and
+  confidence-bin definitions on validation.
+
 ## 2026-07-26. QASPER generation benchmark, metrics Stage 0 to 2
 
 ### Implemented

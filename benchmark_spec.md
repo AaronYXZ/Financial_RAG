@@ -985,7 +985,8 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
 - [x] Implement the minimum local HTTP adapter and sequential experiment runner.
 - [x] Persist raw and parsed prediction JSONL with resume support.
 - [x] Implement failure-rate, retry, latency, token, and local-cost metrics.
-- [ ] Implement citation, abstention, and calibration metrics.
+- [x] Implement citation precision, recall, F1, validity, and coverage metrics.
+- [ ] Implement abstention and calibration metrics.
 - [ ] Implement paper-clustered bootstrap confidence intervals.
 - [ ] Add the blinded claim-support and completeness evaluator.
 - [ ] Complete the stratified human-audit workflow.

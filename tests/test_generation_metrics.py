@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -7,7 +8,9 @@ from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnsw
 from rag_eval.generation_metrics import (
     EvaluationRecord,
     aggregate_answer_quality,
+    aggregate_citation_quality,
     build_evaluation_records,
+    citation_precision_recall_f1,
     evaluate_prediction_files,
     normalize_answer,
     normalized_exact_match,
@@ -73,6 +76,7 @@ def prediction(case_id: str, **overrides):
         "case_id": case_id,
         "track": "oracle-evidence",
         "model_id": "test-model",
+        "context_passage_ids": [PASSAGE.passage_id],
         "parsed_response": {
             "answer": "relevant result",
             "abstain": False,
@@ -221,7 +225,7 @@ def test_abstention_maps_to_official_unanswerable_label():
     assert score["answer_normalized_exact_match"] == 1.0
 
 
-def test_evaluator_writes_stage_zero_to_two_artifacts(tmp_path: Path):
+def test_evaluator_writes_stage_zero_to_three_artifacts(tmp_path: Path):
     case = make_case("q1", (make_reference("a1"),))
     cases_file = tmp_path / "cases.jsonl"
     cases_file.write_text(json.dumps(case.to_dict()) + "\n", encoding="utf-8")
@@ -252,6 +256,135 @@ def test_evaluator_writes_stage_zero_to_two_artifacts(tmp_path: Path):
     )
 
     assert summary["answer_quality"]["token_f1"] == 1.0
+    assert summary["citation_quality"]["citation_f1"] == 1.0
     assert (output_dir / "evaluation_records.jsonl").is_file()
     assert (output_dir / "per_case_metrics.jsonl").is_file()
     assert json.loads((output_dir / "summary.json").read_text()) == summary
+
+
+def test_citation_scoring_selects_best_human_evidence_set():
+    second_passage_id = "paper::paragraph::0002"
+    case = make_case(
+        "q1",
+        (
+            replace(
+                make_reference("a1"),
+                evidence_ids=(PASSAGE.passage_id, second_passage_id),
+            ),
+            replace(make_reference("a2"), evidence_ids=(PASSAGE.passage_id,)),
+        ),
+    )
+    record = EvaluationRecord(
+        case=case,
+        track="oracle-evidence",
+        model_id="test-model",
+        status="valid",
+        prediction=prediction(
+            "q1",
+            context_passage_ids=[PASSAGE.passage_id, second_passage_id],
+        ),
+        duplicate_prediction_count=0,
+    )
+
+    score = score_answer_record(record)
+
+    assert score["citation_evaluable"] is True
+    assert score["winning_citation_annotation_id"] == "a2"
+    assert score["citation_precision"] == 1.0
+    assert score["citation_recall"] == 1.0
+    assert score["citation_f1"] == 1.0
+    assert score["citation_reference_scores"][0]["citation_f1"] == pytest.approx(2 / 3)
+
+
+def test_citation_aggregate_reports_abstention_invalid_and_missing_evidence():
+    answered_case = make_case("answered", (make_reference("a1"),))
+    abstained_case = make_case(
+        "abstained",
+        (make_reference("a2", text="", unanswerable=True),),
+        answerability="unanswerable",
+    )
+    missing_evidence_case = make_case(
+        "missing-evidence",
+        (replace(make_reference("a3"), evidence_ids=()),),
+    )
+    scores = [
+        score_answer_record(
+            EvaluationRecord(
+                answered_case,
+                "complete-paper",
+                "test-model",
+                "valid",
+                prediction("answered"),
+                0,
+            )
+        ),
+        score_answer_record(
+            EvaluationRecord(
+                abstained_case,
+                "complete-paper",
+                "test-model",
+                "valid",
+                prediction(
+                    "abstained",
+                    parsed_response={
+                        "answer": "",
+                        "abstain": True,
+                        "citations": [],
+                        "confidence": 0.8,
+                    },
+                ),
+                0,
+            )
+        ),
+        score_answer_record(
+            EvaluationRecord(
+                missing_evidence_case,
+                "complete-paper",
+                "test-model",
+                "valid",
+                prediction("missing-evidence"),
+                0,
+            )
+        ),
+        score_answer_record(
+            EvaluationRecord(
+                answered_case,
+                "complete-paper",
+                "test-model",
+                "invalid_citation",
+                prediction(
+                    "invalid",
+                    parsed_response=None,
+                    error="Unknown citation IDs",
+                    error_stage="response_validation",
+                ),
+                0,
+            )
+        ),
+    ]
+
+    summary = aggregate_citation_quality(scores)
+
+    assert summary["case_count"] == 4
+    assert summary["answered_case_count"] == 2
+    assert summary["abstained_case_count"] == 1
+    assert summary["invalid_or_missing_response_count"] == 1
+    assert summary["scorable_answered_case_count"] == 1
+    assert summary["missing_reference_evidence_case_count"] == 1
+    assert summary["invalid_citation_case_count"] == 1
+    assert summary["citation_validity_evaluable_count"] == 3
+    assert summary["citation_validity_rate"] == pytest.approx(2 / 3)
+    assert summary["answered_with_citation_rate"] == 1.0
+    assert summary["citation_f1"] == 1.0
+
+
+def test_citation_set_metrics_handle_no_overlap_and_empty_reference():
+    score = citation_precision_recall_f1(["predicted"], ["reference-1", "reference-2"])
+
+    assert score == {
+        "citation_precision": 0.0,
+        "citation_recall": 0.0,
+        "citation_f1": 0.0,
+    }
+    with pytest.raises(ValueError, match="reference evidence ID"):
+        citation_precision_recall_f1(["predicted"], [])

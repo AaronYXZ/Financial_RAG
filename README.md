@@ -132,7 +132,7 @@ command resumes from existing case, track, and model records. It also writes
 `qwen3-4b-smoke.eligibility.json`, which freezes the eligible case IDs used as
 the metric denominator. Use `--no-resume` to overwrite the output.
 
-After the generation run, calculate Stage 0 to 2 metrics:
+After the generation run, calculate Stage 0 to 3 metrics:
 
 ```bash
 rag-generation metrics
@@ -149,10 +149,10 @@ results/generation/qasper-v1/metrics/qwen3-4b-smoke/
 ```
 
 The summary includes response-status rates, retries, latency, token usage, local
-inference cost, official QASPER token F1, and normalized exact match. Missing and
-invalid predictions remain in the denominator and receive zero answer quality.
-Citation, abstention, calibration, bootstrap, and rubric metrics remain future
-stages.
+inference cost, official QASPER token F1, normalized exact match, citation
+precision, citation recall, citation F1, citation validity, and citation coverage.
+Missing and invalid predictions remain visible in the denominator. Abstention,
+calibration, bootstrap, and rubric metrics remain future stages.
 
 ## Evaluation design
 
@@ -307,30 +307,30 @@ Detailed execution contract: [Phase 3 fixed-context generation specification](be
 
 - [x] Use QASPER questions, answers, evidence, and answerability annotations.
 - [x] Normalize QASPER into checksummed, versioned generation cases.
-- [ ] Complete a generation-only runner that bypasses retrieval and supplies the
+- [x] Complete a generation-only runner that bypasses retrieval and supplies the
   same gold passages to every model.
 - [x] Define and implement the structured prompt and response contract.
-- [ ] Freeze context eligibility, decoding settings,
+- [x] Freeze context eligibility, decoding settings,
   model version, and output schema.
 - [x] Pin an immutable QASPER Parquet revision.
 - [x] Download and normalize the complete QASPER validation split.
 - [ ] Run both oracle-evidence and complete-paper fixed-context tracks.
 - [x] Require a structured response containing the answer, citations, and an
   abstention indicator.
-- [ ] Measure answer correctness against QASPER reference answers.
+- [x] Measure answer correctness against QASPER reference answers.
 - [ ] Measure faithfulness by checking that each material claim is supported by
   the supplied context.
 - [ ] Measure rubric completeness against the references and context. QASPER does
   not contain atomic required-fact annotations.
-- [ ] Measure citation precision, citation recall, and whether each citation
-  supports the associated claim.
+- [x] Measure citation precision and recall against annotated evidence sets.
+- [ ] Measure whether each citation supports its associated generated claim.
 - [ ] Test appropriate abstention using both answerable and unanswerable
   questions. Report false-answer and false-abstention rates separately.
 - [ ] Combine deterministic checks with a rubric-based evaluator. Blind the
   evaluator to system names and randomize candidate order.
 - [ ] Manually audit a stratified sample and measure agreement between human and
   automated judgments.
-- [ ] Record input tokens, output tokens, cost, p50/p95/p99 latency, errors, and
+- [x] Record input tokens, output tokens, cost, p50/p95/p99 latency, errors, and
   retries.
 
 **Exit gate:** with gold context, the generator meets correctness, faithfulness,
