@@ -986,7 +986,8 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
 - [x] Persist raw and parsed prediction JSONL with resume support.
 - [x] Implement failure-rate, retry, latency, token, and local-cost metrics.
 - [x] Implement citation precision, recall, F1, validity, and coverage metrics.
-- [ ] Implement abstention and calibration metrics.
+- [x] Implement basic Track B abstention and answerability metrics.
+- [ ] Implement risk-coverage and calibration metrics.
 - [ ] Implement paper-clustered bootstrap confidence intervals.
 - [ ] Add the blinded claim-support and completeness evaluator.
 - [ ] Complete the stratified human-audit workflow.

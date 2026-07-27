@@ -4,8 +4,8 @@ This document traces the current `rag-generation run` implementation from the
 shell command through QASPER case loading, prompt construction, local Qwen
 inference, validation, persistence, and process exit.
 
-It describes the runner and the implemented Stage 0 to 3 deterministic metric
-layers. Abstention, calibration, judge, and bootstrap layers remain future work.
+It describes the runner and the implemented Stage 0 to 4 deterministic metric
+layers. Calibration, judge, and bootstrap layers remain future work.
 
 ## 1. Processes and prerequisites
 
@@ -155,7 +155,7 @@ rag_eval.generation_cli.main()
 |---|---:|---|
 | `--cases-file` | `data/generation/qasper-v1/validation.cases.jsonl` | `_run()` |
 | `--track` | `oracle-evidence` | `run_generation_cases()` and `build_fixed_context()` |
-| `--output-file` | `results/generation/qasper-v1/predictions/qwen3-4b-smoke.jsonl` | `run_generation_cases()` |
+| `--output-file` | `results/generation/qasper-v1/predictions/qwen3-4b-track-b-v1.jsonl` | `run_generation_cases()` |
 | `--base-url` | `http://127.0.0.1:8080/v1` | `OpenAICompatibleAdapter` |
 | `--model` | `mlx-community/Qwen3-4B-Instruct-2507-4bit` | Adapter request and resume key |
 | `--tokenizer` | `Qwen/Qwen3-4B-Instruct-2507` | `AutoTokenizer.from_pretrained()` |
@@ -495,9 +495,9 @@ The console-script wrapper consumes that integer as the process exit status.
 - A resumed run fails if its eligibility manifest would change.
 - Context construction and token-count failures occur before the per-call error
   handler and currently stop the run.
-- The evaluator computes QASPER token F1, normalized exact match, citation evidence overlap,
-  reliability, latency, and token summaries. Abstention, confidence intervals, and
-  judge scores remain future work.
+- The evaluator computes QASPER token F1, normalized exact match, citation evidence
+  overlap, Track B abstention, reliability, latency, and token summaries.
+  Calibration, confidence intervals, and judge scores remain future work.
 
 ## 15. Source map
 
@@ -510,10 +510,10 @@ The console-script wrapper consumes that integer as the process exit status.
 | Prompt rendering, hash, and validation | [`src/rag_eval/generation_prompt.py`](src/rag_eval/generation_prompt.py) |
 | Local HTTP and tokenizer adapter | [`src/rag_eval/generation_adapter.py`](src/rag_eval/generation_adapter.py) |
 | Case loop, eligibility, persistence, resume | [`src/rag_eval/generation_runner.py`](src/rag_eval/generation_runner.py) |
-| Stage 0 to 3 metrics | [`src/rag_eval/generation_metrics.py`](src/rag_eval/generation_metrics.py) |
+| Stage 0 to 4 metrics | [`src/rag_eval/generation_metrics.py`](src/rag_eval/generation_metrics.py) |
 | Smoke-test command | [`README.md`](README.md) |
 
-## 16. Stage 0 to 3 metric execution
+## 16. Stage 0 to 4 metric execution
 
 Run metrics only after `rag-generation run` has created both the prediction JSONL
 and its eligibility sidecar:
@@ -536,9 +536,11 @@ flowchart LR
     Status --> Reliability["reliability_and_efficiency()"]
     Quality --> Aggregate["aggregate_answer_quality()"]
     Quality --> Citations["aggregate_citation_quality()"]
+    Quality --> Abstention["aggregate_abstention_quality()"]
     Reliability --> Summary["summary.json"]
     Aggregate --> Summary
     Citations --> Summary
+    Abstention --> Summary
     Join --> Records["evaluation_records.jsonl"]
     Quality --> PerCase["per_case_metrics.jsonl"]
 ```
@@ -560,8 +562,10 @@ The evaluator takes these steps:
    annotation, and retain the best score per case.
 8. Compare citations with every non-empty annotation evidence set, retain the best
    citation-F1 match, and report unscorable evidence cases separately.
-9. Write evaluation records, per-case answer and citation scores, and the aggregate
-   summary.
+9. On complete-paper runs, compare the unanimous answerability label with the
+   declared abstention, report invalid outputs as no decisions, and keep ambiguous
+   cases outside primary binary metrics.
+10. Write evaluation records, per-case scores, and the aggregate summary.
 
 Invalid and missing predictions receive zero answer quality. They remain in the
 eligible-case denominator, which prevents failed calls from inflating the score.

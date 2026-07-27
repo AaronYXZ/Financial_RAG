@@ -127,12 +127,12 @@ rag-generation run \
 The runner calls the server's OpenAI-compatible chat endpoint sequentially,
 counts tokens with the original Qwen tokenizer, rejects prompts that exceed the
 shared context limit, validates the strict JSON response, and appends predictions
-to `results/generation/qasper-v1/predictions/qwen3-4b-smoke.jsonl`. Repeating the
+to `results/generation/qasper-v1/predictions/qwen3-4b-track-b-v1.jsonl`. Repeating the
 command resumes from existing case, track, and model records. It also writes
-`qwen3-4b-smoke.eligibility.json`, which freezes the eligible case IDs used as
+`qwen3-4b-track-b-v1.eligibility.json`, which freezes the eligible case IDs used as
 the metric denominator. Use `--no-resume` to overwrite the output.
 
-After the generation run, calculate Stage 0 to 3 metrics:
+After the generation run, calculate Stage 0 to 4 metrics:
 
 ```bash
 rag-generation metrics
@@ -151,8 +151,10 @@ results/generation/qasper-v1/metrics/qwen3-4b-smoke/
 The summary includes response-status rates, retries, latency, token usage, local
 inference cost, official QASPER token F1, normalized exact match, citation
 precision, citation recall, citation F1, citation validity, and citation coverage.
-Missing and invalid predictions remain visible in the denominator. Abstention,
-calibration, bootstrap, and rubric metrics remain future stages.
+Missing and invalid predictions remain visible in the denominator. Complete-paper
+runs also report answerability accuracy, abstention precision, recall, F1, false
+answers, false abstentions, no decisions, and a confusion matrix. Calibration,
+bootstrap, and rubric metrics remain future stages.
 
 ## Evaluation design
 

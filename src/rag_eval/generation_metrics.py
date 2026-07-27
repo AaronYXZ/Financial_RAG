@@ -303,8 +303,10 @@ def score_answer_record(record: EvaluationRecord) -> dict[str, Any]:
         raise ValueError(f"Case {record.case.case_id} has no reference answers")
     winning = max(reference_scores, key=lambda item: item["token_f1"])
     citation_score = score_citation_record(record)
+    abstention_score = score_abstention_record(record)
     return {
         **citation_score,
+        **abstention_score,
         "case_id": record.case.case_id,
         "paper_id": record.case.paper_id,
         "track": record.track,
@@ -379,6 +381,7 @@ def evaluate_prediction_files(
         "reliability_and_efficiency": reliability_and_efficiency(records),
         "answer_quality": aggregate_answer_quality(per_case),
         "citation_quality": aggregate_citation_quality(per_case),
+        "abstention_quality": aggregate_abstention_quality(per_case, track=track),
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -539,4 +542,149 @@ def aggregate_citation_quality(
         "citation_precision": mean("citation_precision"),
         "citation_recall": mean("citation_recall"),
         "citation_f1": mean("citation_f1"),
+    }
+
+
+def score_abstention_record(record: EvaluationRecord) -> dict[str, Any]:
+    expected_abstain = {
+        "answerable": False,
+        "unanswerable": True,
+        "ambiguous": None,
+    }.get(record.case.answerability)
+    if record.track != "complete-paper":
+        return {
+            "abstention_primary_eligible": False,
+            "expected_abstain": expected_abstain,
+            "predicted_abstain": None,
+            "abstention_outcome": "not_applicable",
+        }
+
+    response = (record.prediction or {}).get("parsed_response")
+    predicted_abstain = (
+        bool(response["abstain"])
+        if record.status == "valid" and isinstance(response, Mapping)
+        else None
+    )
+    if expected_abstain is None:
+        ambiguous_outcome = {
+            True: "ambiguous_abstain",
+            False: "ambiguous_answer",
+            None: "ambiguous_no_decision",
+        }
+        return {
+            "abstention_primary_eligible": False,
+            "expected_abstain": None,
+            "predicted_abstain": predicted_abstain,
+            "abstention_outcome": ambiguous_outcome[predicted_abstain],
+        }
+
+    if predicted_abstain is None:
+        outcome = "no_decision"
+    elif expected_abstain and predicted_abstain:
+        outcome = "correct_abstention"
+    elif expected_abstain:
+        outcome = "false_answer"
+    elif predicted_abstain:
+        outcome = "false_abstention"
+    else:
+        outcome = "correct_answer"
+    return {
+        "abstention_primary_eligible": True,
+        "expected_abstain": expected_abstain,
+        "predicted_abstain": predicted_abstain,
+        "abstention_outcome": outcome,
+    }
+
+
+def aggregate_abstention_quality(
+    per_case: Sequence[Mapping[str, Any]],
+    *,
+    track: str,
+) -> dict[str, Any]:
+    if track != "complete-paper":
+        return {
+            "applicable": False,
+            "reason": "Abstention metrics require the complete-paper track",
+            "case_count": len(per_case),
+        }
+
+    primary = [item for item in per_case if item["abstention_primary_eligible"]]
+    ambiguous = [
+        item
+        for item in per_case
+        if item["answerability"] == "ambiguous"
+    ]
+    answerable = [item for item in primary if item["expected_abstain"] is False]
+    unanswerable = [item for item in primary if item["expected_abstain"] is True]
+
+    outcomes = Counter(item["abstention_outcome"] for item in primary)
+    true_positive = outcomes["correct_abstention"]
+    false_positive = outcomes["false_abstention"]
+    true_negative = outcomes["correct_answer"]
+    explicit_false_answer = outcomes["false_answer"]
+    no_decision_unanswerable = sum(
+        item["abstention_outcome"] == "no_decision" for item in unanswerable
+    )
+    no_decision_answerable = sum(
+        item["abstention_outcome"] == "no_decision" for item in answerable
+    )
+    false_negative = explicit_false_answer + no_decision_unanswerable
+
+    precision = (
+        true_positive / (true_positive + false_positive)
+        if true_positive + false_positive
+        else None
+    )
+    recall = true_positive / len(unanswerable) if unanswerable else None
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if precision is not None and recall is not None and precision + recall
+        else 0.0 if precision is not None and recall is not None else None
+    )
+    ambiguous_outcomes = Counter(
+        item["abstention_outcome"] for item in ambiguous
+    )
+
+    return {
+        "applicable": True,
+        "case_count": len(per_case),
+        "primary_case_count": len(primary),
+        "ambiguous_case_count": len(ambiguous),
+        "answerable_case_count": len(answerable),
+        "unanswerable_case_count": len(unanswerable),
+        "valid_decision_count": sum(
+            item["predicted_abstain"] is not None for item in primary
+        ),
+        "no_decision_count": outcomes["no_decision"],
+        "no_decision_rate": (
+            outcomes["no_decision"] / len(primary) if primary else None
+        ),
+        "answerability_accuracy": (
+            (true_positive + true_negative) / len(primary) if primary else None
+        ),
+        "abstention_precision": precision,
+        "abstention_recall": recall,
+        "abstention_f1": f1,
+        "false_answer_count": explicit_false_answer,
+        "false_answer_rate": (
+            explicit_false_answer / len(unanswerable) if unanswerable else None
+        ),
+        "false_abstention_count": false_positive,
+        "false_abstention_rate": (
+            false_positive / len(answerable) if answerable else None
+        ),
+        "confusion_matrix": {
+            "true_positive_correct_abstention": true_positive,
+            "false_positive_false_abstention": false_positive,
+            "true_negative_correct_answer": true_negative,
+            "false_negative_answer_or_no_decision": false_negative,
+            "explicit_false_answer": explicit_false_answer,
+            "no_decision_unanswerable": no_decision_unanswerable,
+            "no_decision_answerable": no_decision_answerable,
+        },
+        "ambiguous_outcomes": {
+            "answer": ambiguous_outcomes["ambiguous_answer"],
+            "abstain": ambiguous_outcomes["ambiguous_abstain"],
+            "no_decision": ambiguous_outcomes["ambiguous_no_decision"],
+        },
     }

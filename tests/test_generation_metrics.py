@@ -7,6 +7,7 @@ import pytest
 from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
 from rag_eval.generation_metrics import (
     EvaluationRecord,
+    aggregate_abstention_quality,
     aggregate_answer_quality,
     aggregate_citation_quality,
     build_evaluation_records,
@@ -225,7 +226,7 @@ def test_abstention_maps_to_official_unanswerable_label():
     assert score["answer_normalized_exact_match"] == 1.0
 
 
-def test_evaluator_writes_stage_zero_to_three_artifacts(tmp_path: Path):
+def test_evaluator_writes_stage_zero_to_four_artifacts(tmp_path: Path):
     case = make_case("q1", (make_reference("a1"),))
     cases_file = tmp_path / "cases.jsonl"
     cases_file.write_text(json.dumps(case.to_dict()) + "\n", encoding="utf-8")
@@ -257,6 +258,7 @@ def test_evaluator_writes_stage_zero_to_three_artifacts(tmp_path: Path):
 
     assert summary["answer_quality"]["token_f1"] == 1.0
     assert summary["citation_quality"]["citation_f1"] == 1.0
+    assert summary["abstention_quality"]["applicable"] is False
     assert (output_dir / "evaluation_records.jsonl").is_file()
     assert (output_dir / "per_case_metrics.jsonl").is_file()
     assert json.loads((output_dir / "summary.json").read_text()) == summary
@@ -388,3 +390,113 @@ def test_citation_set_metrics_handle_no_overlap_and_empty_reference():
     }
     with pytest.raises(ValueError, match="reference evidence ID"):
         citation_precision_recall_f1(["predicted"], [])
+
+
+def test_track_b_abstention_metrics_include_no_decisions_and_exclude_ambiguous():
+    def scored(
+        case_id: str,
+        answerability: str,
+        predicted_abstain: bool | None,
+    ):
+        case = make_case(
+            case_id,
+            (
+                make_reference(
+                    f"{case_id}-annotation",
+                    text="" if answerability == "unanswerable" else "answer",
+                    unanswerable=answerability == "unanswerable",
+                ),
+            ),
+            answerability=answerability,
+        )
+        if predicted_abstain is None:
+            row = prediction(
+                case_id,
+                parsed_response=None,
+                error="Generation response keys are invalid",
+                error_stage="response_validation",
+            )
+            status = "invalid_schema"
+        else:
+            row = prediction(
+                case_id,
+                parsed_response={
+                    "answer": "" if predicted_abstain else "answer",
+                    "abstain": predicted_abstain,
+                    "citations": [] if predicted_abstain else [PASSAGE.passage_id],
+                    "confidence": 0.8,
+                },
+            )
+            status = "valid"
+        return score_answer_record(
+            EvaluationRecord(
+                case,
+                "complete-paper",
+                "test-model",
+                status,
+                row,
+                0,
+            )
+        )
+
+    per_case = [
+        scored("correct-answer", "answerable", False),
+        scored("false-abstention", "answerable", True),
+        scored("correct-abstention", "unanswerable", True),
+        scored("false-answer", "unanswerable", False),
+        scored("no-decision", "unanswerable", None),
+        scored("ambiguous", "ambiguous", False),
+    ]
+
+    summary = aggregate_abstention_quality(per_case, track="complete-paper")
+
+    assert summary["applicable"] is True
+    assert summary["primary_case_count"] == 5
+    assert summary["ambiguous_case_count"] == 1
+    assert summary["answerable_case_count"] == 2
+    assert summary["unanswerable_case_count"] == 3
+    assert summary["answerability_accuracy"] == pytest.approx(2 / 5)
+    assert summary["abstention_precision"] == 0.5
+    assert summary["abstention_recall"] == pytest.approx(1 / 3)
+    assert summary["abstention_f1"] == pytest.approx(0.4)
+    assert summary["false_answer_rate"] == pytest.approx(1 / 3)
+    assert summary["false_abstention_rate"] == 0.5
+    assert summary["no_decision_rate"] == pytest.approx(1 / 5)
+    assert summary["confusion_matrix"] == {
+        "true_positive_correct_abstention": 1,
+        "false_positive_false_abstention": 1,
+        "true_negative_correct_answer": 1,
+        "false_negative_answer_or_no_decision": 2,
+        "explicit_false_answer": 1,
+        "no_decision_unanswerable": 1,
+        "no_decision_answerable": 0,
+    }
+    assert summary["ambiguous_outcomes"] == {
+        "answer": 1,
+        "abstain": 0,
+        "no_decision": 0,
+    }
+
+
+def test_abstention_metrics_are_not_applicable_to_oracle_evidence_track():
+    case = make_case("q1", (make_reference("a1"),))
+    per_case = [
+        score_answer_record(
+            EvaluationRecord(
+                case,
+                "oracle-evidence",
+                "test-model",
+                "valid",
+                prediction("q1"),
+                0,
+            )
+        )
+    ]
+
+    summary = aggregate_abstention_quality(per_case, track="oracle-evidence")
+
+    assert summary == {
+        "applicable": False,
+        "reason": "Abstention metrics require the complete-paper track",
+        "case_count": 1,
+    }

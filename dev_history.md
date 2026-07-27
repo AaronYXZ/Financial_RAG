@@ -1,5 +1,34 @@
 # Development History
 
+## 2026-07-26. Basic abstention metrics, Stage 4
+
+### Implemented
+
+- Added Track B answerability accuracy, abstention precision, recall, and F1.
+- Added false-answer rates for unanimous unanswerable cases and false-abstention
+  rates for unanimous answerable cases.
+- Added class counts, valid-decision and no-decision counts, and an explicit
+  confusion matrix.
+- Counted invalid and missing predictions as `no_decision`. These outcomes reduce
+  answerability accuracy and abstention recall without being mislabeled as a
+  generated false answer or false abstention.
+- Excluded ambiguous QASPER cases from primary binary metrics while reporting
+  their answer, abstain, and no-decision outcomes separately.
+- Marked abstention evaluation as not applicable for the oracle-evidence track,
+  which contains only answerable cases.
+- Added synthetic Track B tests covering every primary confusion outcome,
+  ambiguous cases, and invalid responses.
+
+### Remaining Stage 4 execution
+
+- Run the complete-paper Track B benchmark to produce reportable abstention
+  results. The existing oracle-evidence smoke run cannot measure abstention.
+
+### Next metrics
+
+- Freeze the correctness definition and confidence bins on validation.
+- Implement risk-coverage area and expected calibration error.
+
 ## 2026-07-26. Citation and evidence metrics, Stage 3
 
 ### Implemented
@@ -91,10 +120,10 @@ For the current 25-case oracle-evidence Qwen3 smoke run:
   Calling `len()` on that object counts mapping fields, producing `2`, rather
   than counting prompt token IDs. Token counting now reads `input_ids` from
   mapping-shaped results and handles a single nested token row.
-- Existing `qwen3-4b-smoke.jsonl` predictions predate the eligibility sidecar and
+- Existing `qwen3-4b-track-b-v1.jsonl` predictions predate the eligibility sidecar and
   contain the incorrect local token count, although the server token counts are
   intact. After this correction, resume the same generation configuration to
-  recompute eligibility and create `qwen3-4b-smoke.eligibility.json` before
+  recompute eligibility and create `qwen3-4b-track-b-v1.eligibility.json` before
   running metrics.
 
 ### Remaining work
