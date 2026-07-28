@@ -83,10 +83,19 @@ def _prepare(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run(args: argparse.Namespace) -> int:
-    cases_path = Path(args.cases_file)
+def _load_cases(cases_path: Path):
     with cases_path.open(encoding="utf-8") as handle:
-        cases = [generation_case_from_dict(json.loads(line)) for line in handle]
+        return [generation_case_from_dict(json.loads(line)) for line in handle]
+
+
+def _execute_generation(
+    args: argparse.Namespace,
+    *,
+    track: str,
+    context_manifest: str | None = None,
+) -> int:
+    cases_path = Path(args.cases_file)
+    cases = _load_cases(cases_path)
     adapter = OpenAICompatibleAdapter(
         base_url=args.base_url,
         model_id=args.model,
@@ -98,10 +107,10 @@ def _run(args: argparse.Namespace) -> int:
     )
     retrieved_contexts = None
     context_manifest_sha256 = None
-    if args.track == "retrieved-context":
-        if not args.context_manifest:
+    if track == "retrieved-context":
+        if not context_manifest:
             raise ValueError("--context-manifest is required for retrieved-context")
-        context_manifest_path = Path(args.context_manifest)
+        context_manifest_path = Path(context_manifest)
         context_manifest = load_frozen_context_manifest(context_manifest_path)
         if context_manifest["cases_sha256"] != file_sha256(cases_path):
             raise ValueError("Frozen context manifest cases checksum does not match")
@@ -111,11 +120,15 @@ def _run(args: argparse.Namespace) -> int:
     counts = run_generation_cases(
         cases,
         adapter=adapter,
-        track=args.track,
+        track=track,
         output_file=Path(args.output_file),
         max_context_tokens=args.max_context_tokens,
         max_output_tokens=args.max_output_tokens,
-        max_cases=None if args.track == "retrieved-context" else args.max_cases,
+        max_cases=(
+            None
+            if track == "retrieved-context"
+            else getattr(args, "max_cases", None)
+        ),
         resume=args.resume,
         retrieved_contexts=retrieved_contexts,
         context_manifest_sha256=context_manifest_sha256,
@@ -124,28 +137,88 @@ def _run(args: argparse.Namespace) -> int:
     return 1 if counts["errors"] else 0
 
 
-def _freeze_context(args: argparse.Namespace) -> int:
-    cases_path = Path(args.cases_file)
-    with cases_path.open(encoding="utf-8") as handle:
-        cases = [generation_case_from_dict(json.loads(line)) for line in handle]
-    eligibility_file = Path(args.eligibility_file)
+def _run(args: argparse.Namespace) -> int:
+    return _execute_generation(
+        args,
+        track=args.track,
+        context_manifest=args.context_manifest,
+    )
+
+
+def _generate_oracle(args: argparse.Namespace) -> int:
+    return _execute_generation(args, track="oracle-evidence")
+
+
+def _generate_retrieved(args: argparse.Namespace) -> int:
+    return _execute_generation(
+        args,
+        track="retrieved-context",
+        context_manifest=args.context_manifest,
+    )
+
+
+def _freeze_context_payload(
+    *,
+    cases_path: Path,
+    eligibility_file: Path,
+    output_file: Path,
+    top_k: int,
+) -> dict:
+    cases = _load_cases(cases_path)
     eligibility = load_eligibility_manifest(eligibility_file)
     case_ids = eligibility["eligible_case_ids"]
     contexts = freeze_bm25_contexts(
         cases,
         eligible_case_ids=case_ids,
-        top_k=args.top_k,
+        top_k=top_k,
     )
-    payload = write_frozen_context_manifest(
-        Path(args.output_file),
+    return write_frozen_context_manifest(
+        output_file,
         cases_file=cases_path,
         eligibility_file=eligibility_file,
         eligible_case_ids=case_ids,
         contexts=contexts,
+        top_k=top_k,
+    )
+
+
+def _freeze_context(args: argparse.Namespace) -> int:
+    payload = _freeze_context_payload(
+        cases_path=Path(args.cases_file),
+        eligibility_file=Path(args.eligibility_file),
+        output_file=Path(args.output_file),
         top_k=args.top_k,
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
+
+
+def _generate_end_to_end(args: argparse.Namespace) -> int:
+    context_manifest = Path(args.context_manifest)
+    payload = _freeze_context_payload(
+        cases_path=Path(args.cases_file),
+        eligibility_file=Path(args.eligibility_file),
+        output_file=context_manifest,
+        top_k=args.top_k,
+    )
+    print(
+        json.dumps(
+            {
+                "retrieval": {
+                    "context_manifest": str(context_manifest),
+                    "eligible_case_count": payload["eligible_case_count"],
+                    "retriever": payload["retriever"],
+                }
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return _execute_generation(
+        args,
+        track="retrieved-context",
+        context_manifest=str(context_manifest),
+    )
 
 
 def _metrics(args: argparse.Namespace) -> int:
@@ -180,6 +253,39 @@ def _compare_responses(args: argparse.Namespace) -> int:
         write_comparison(Path(args.output_file), comparison)
     print(json.dumps(comparison, indent=2, sort_keys=True))
     return 0
+
+
+def _add_generation_arguments(
+    command: argparse.ArgumentParser,
+    *,
+    default_output_file: str,
+    include_max_cases: bool,
+) -> None:
+    command.add_argument(
+        "--cases-file",
+        default="data/generation/qasper-v1/validation.cases.jsonl",
+    )
+    command.add_argument("--output-file", default=default_output_file)
+    command.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
+    command.add_argument(
+        "--model",
+        default="mlx-community/Qwen3-4B-Instruct-2507-4bit",
+    )
+    command.add_argument("--tokenizer", default="Qwen/Qwen3-4B-Instruct-2507")
+    command.add_argument("--max-context-tokens", type=int, default=32_768)
+    command.add_argument("--max-output-tokens", type=int, default=512)
+    if include_max_cases:
+        command.add_argument("--max-cases", type=int, default=25)
+    command.add_argument("--temperature", type=float, default=0.0)
+    command.add_argument("--timeout", type=float, default=300.0)
+    command.add_argument("--retries", type=int, default=1)
+    command.add_argument(
+        "--no-resume",
+        action="store_false",
+        dest="resume",
+        help="Overwrite the prediction file instead of resuming it",
+    )
+    command.set_defaults(resume=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -226,6 +332,61 @@ def build_parser() -> argparse.ArgumentParser:
         help="Overwrite the prediction file instead of resuming it",
     )
     run.set_defaults(handler=_run, resume=True)
+    oracle = subparsers.add_parser(
+        "generate-oracle",
+        help="Generate answers from oracle evidence only",
+    )
+    _add_generation_arguments(
+        oracle,
+        default_output_file=(
+            "results/generation/qasper-v1/predictions/"
+            "qwen3-4b-oracle-v2.jsonl"
+        ),
+        include_max_cases=True,
+    )
+    oracle.set_defaults(handler=_generate_oracle)
+    retrieved = subparsers.add_parser(
+        "generate-retrieved",
+        help="Generate answers from a previously frozen retrieval manifest",
+    )
+    _add_generation_arguments(
+        retrieved,
+        default_output_file=(
+            "results/generation/qasper-v1/predictions/"
+            "qwen3-4b-retrieved-bm25-top5-v1.jsonl"
+        ),
+        include_max_cases=False,
+    )
+    retrieved.add_argument(
+        "--context-manifest",
+        required=True,
+        help="Previously frozen retrieval manifest.",
+    )
+    retrieved.set_defaults(handler=_generate_retrieved)
+    end_to_end = subparsers.add_parser(
+        "generate-end-to-end",
+        help="Retrieve, freeze context, and generate in one reproducible command",
+    )
+    _add_generation_arguments(
+        end_to_end,
+        default_output_file=(
+            "results/generation/qasper-v1/predictions/"
+            "qwen3-4b-end-to-end-bm25-top5-v1.jsonl"
+        ),
+        include_max_cases=False,
+    )
+    end_to_end.add_argument(
+        "--eligibility-file",
+        required=True,
+        help="Frozen eligible-case set to retrieve and generate for.",
+    )
+    end_to_end.add_argument(
+        "--context-manifest",
+        default="data/generation/qasper-v1/retrieval/end-to-end-bm25-top5-v1.json",
+        help="Path where the end-to-end command freezes its retrieval output.",
+    )
+    end_to_end.add_argument("--top-k", type=int, default=5)
+    end_to_end.set_defaults(handler=_generate_end_to_end)
     freeze = subparsers.add_parser(
         "freeze-context",
         help="Freeze BM25 top-K passages for an existing eligible-case set",

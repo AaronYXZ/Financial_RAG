@@ -1,3 +1,7 @@
+from argparse import Namespace
+from pathlib import Path
+
+import rag_eval.generation_cli as generation_cli
 from rag_eval.generation_cli import build_parser
 
 
@@ -39,3 +43,85 @@ def test_retrieved_context_is_a_supported_track():
 
     assert args.track == "retrieved-context"
     assert args.context_manifest == "frozen.json"
+
+
+def test_generate_oracle_has_task_specific_defaults():
+    args = build_parser().parse_args(["generate-oracle"])
+
+    assert args.command == "generate-oracle"
+    assert args.max_cases == 25
+    assert args.output_file.endswith("qwen3-4b-oracle-v2.jsonl")
+    assert not hasattr(args, "track")
+    assert not hasattr(args, "context_manifest")
+
+
+def test_generate_retrieved_requires_a_frozen_context_manifest():
+    args = build_parser().parse_args(
+        ["generate-retrieved", "--context-manifest", "frozen.json"]
+    )
+
+    assert args.command == "generate-retrieved"
+    assert args.context_manifest == "frozen.json"
+    assert args.output_file.endswith("qwen3-4b-retrieved-bm25-top5-v1.jsonl")
+    assert not hasattr(args, "max_cases")
+
+
+def test_generate_end_to_end_freezes_retrieval_before_generation():
+    args = build_parser().parse_args(
+        ["generate-end-to-end", "--eligibility-file", "eligible.json"]
+    )
+
+    assert args.command == "generate-end-to-end"
+    assert args.eligibility_file == "eligible.json"
+    assert args.top_k == 5
+    assert args.context_manifest.endswith("end-to-end-bm25-top5-v1.json")
+    assert args.output_file.endswith("qwen3-4b-end-to-end-bm25-top5-v1.jsonl")
+
+
+def test_end_to_end_handler_passes_new_manifest_to_generation(
+    monkeypatch,
+    tmp_path: Path,
+):
+    calls = []
+    context_manifest = tmp_path / "retrieval.json"
+    args = Namespace(
+        cases_file=str(tmp_path / "cases.jsonl"),
+        eligibility_file=str(tmp_path / "eligible.json"),
+        context_manifest=str(context_manifest),
+        top_k=7,
+    )
+
+    def fake_freeze(**kwargs):
+        calls.append(("freeze", kwargs))
+        return {
+            "eligible_case_count": 3,
+            "retriever": {"name": "bm25", "parameters": {"top_k": 7}},
+        }
+
+    def fake_execute(received_args, *, track, context_manifest):
+        calls.append(
+            (
+                "generate",
+                {
+                    "args": received_args,
+                    "track": track,
+                    "context_manifest": context_manifest,
+                },
+            )
+        )
+        return 0
+
+    monkeypatch.setattr(generation_cli, "_freeze_context_payload", fake_freeze)
+    monkeypatch.setattr(generation_cli, "_execute_generation", fake_execute)
+
+    assert generation_cli._generate_end_to_end(args) == 0
+    assert calls[0][0] == "freeze"
+    assert calls[0][1]["top_k"] == 7
+    assert calls[1] == (
+        "generate",
+        {
+            "args": args,
+            "track": "retrieved-context",
+            "context_manifest": str(context_manifest),
+        },
+    )

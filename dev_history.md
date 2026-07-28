@@ -1,5 +1,18 @@
 # Development History
 
+## 2026-07-27. Task-oriented generation CLI
+
+### Implemented
+
+- Added `generate-oracle` for controlled generation from annotated evidence.
+- Added `generate-retrieved` for generation from an existing frozen retrieval
+  manifest without rerunning retrieval.
+- Added `generate-end-to-end` to retrieve, persist a checksummed context
+  manifest, and generate in one command.
+- Kept the lower-level `run` and `freeze-context` commands for compatibility and
+  experiment debugging.
+- Added task-specific defaults, help text, parser tests, and sample commands.
+
 ## 2026-07-27. Matched prompt comparison and frozen retrieved context
 
 ### Implemented

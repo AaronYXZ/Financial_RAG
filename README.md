@@ -116,13 +116,46 @@ mlx_lm.server --model mlx-community/Qwen3-4B-Instruct-2507-4bit
 ```
 
 The server listens on `http://127.0.0.1:8080` by default. It is intended only as
-a local benchmark endpoint. In a second terminal, run the 25-case oracle-evidence
-smoke test:
+a local benchmark endpoint.
+
+### Three generation tasks
+
+Use `generate-oracle` to measure generation with gold evidence and no retrieval
+failure:
 
 ```bash
-rag-generation run \
-  --track oracle-evidence \
+rag-generation generate-oracle \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --output-file results/generation/qasper-v1/predictions/qwen3-4b-oracle-v2.jsonl \
   --max-cases 25 \
+  --max-context-tokens 32768 \
+  --max-output-tokens 512
+```
+
+Use `generate-retrieved` to replay a previously frozen context manifest. This
+task does not invoke retrieval, so different generators receive identical
+passages:
+
+```bash
+rag-generation generate-retrieved \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --context-manifest data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
+  --output-file results/generation/qasper-v1/predictions/qwen3-4b-retrieved-bm25-top5-v1.jsonl \
+  --max-context-tokens 32768 \
+  --max-output-tokens 512
+```
+
+Use `generate-end-to-end` to run BM25 retrieval and generation in one command.
+The retrieval result is frozen before the first model call, so the complete run
+can be replayed later with `generate-retrieved`:
+
+```bash
+rag-generation generate-end-to-end \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --top-k 5 \
+  --context-manifest data/generation/qasper-v1/retrieval/end-to-end-bm25-top5-v1.json \
+  --output-file results/generation/qasper-v1/predictions/qwen3-4b-end-to-end-bm25-top5-v1.jsonl \
   --max-context-tokens 32768 \
   --max-output-tokens 512
 ```
@@ -156,8 +189,7 @@ rag-generation compare-responses \
   --output-file results/generation/qasper-v1/comparisons/track-b-prompt-v1-v2.json
 ```
 
-Freeze a BM25 top-five context set from the same Track B denominator, then run the
-retrieved-context track:
+The lower-level equivalent of the retrieved workflow remains available:
 
 ```bash
 rag-generation freeze-context \
@@ -165,8 +197,7 @@ rag-generation freeze-context \
   --output-file data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
   --top-k 5
 
-rag-generation run \
-  --track retrieved-context \
+rag-generation generate-retrieved \
   --context-manifest data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
   --output-file results/generation/qasper-v1/predictions/qwen3-4b-retrieved-bm25-top5-v1.jsonl
 ```
