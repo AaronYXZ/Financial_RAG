@@ -143,8 +143,9 @@ rag-generation generate-oracle \
   --openai-model gpt-5 \
   --env-file .env \
   --cases-file data/generation/qasper-v1/validation.cases.jsonl \
-  --output-file results/generation/qasper-v1/predictions/gpt-5-oracle-v1.jsonl \
-  --max-cases 25
+  --output-file results/generation/qasper-v1/predictions/gpt-5-oracle-v3.jsonl \
+  --max-cases 25 \
+  --max-output-tokens 1024
 ```
 
 `gpt-5` is the default OpenAI model. The allowed model IDs are:
@@ -159,9 +160,41 @@ Evaluate that run with:
 rag-generation metrics \
   --track oracle-evidence \
   --model gpt-5 \
-  --predictions-file results/generation/qasper-v1/predictions/gpt-5-oracle-v1.jsonl \
-  --output-dir results/generation/qasper-v1/metrics/gpt-5-oracle-v1
+  --predictions-file results/generation/qasper-v1/predictions/gpt-5-oracle-v3.jsonl \
+  --output-dir results/generation/qasper-v1/metrics/gpt-5-oracle-v3
 ```
+
+### Oracle generator comparison
+
+The 25-case QASPER oracle runs produced the following aggregate metrics:
+
+| Metric | Qwen3 4B local | GPT-5 API | GPT-5 minus Qwen3 |
+| --- | ---: | ---: | ---: |
+| Valid response rate | 1.0000 | 1.0000 | 0.0000 |
+| Normalized exact match | 0.0000 | 0.0400 | +0.0400 |
+| Answer token F1 | 0.3150 | 0.3733 | +0.0583 |
+| Citation precision | 0.8659 | 0.9058 | +0.0399 |
+| Citation recall | 0.9167 | 0.8551 | -0.0616 |
+| Citation F1 | 0.8717 | 0.8467 | -0.0251 |
+| Mean latency, seconds | 2.9146 | 6.7700 | +3.8554 |
+| Mean total tokens | 922.52 | 1226.52 | +304.00 |
+
+GPT-5 had higher answer token F1 on 15 matched cases, Qwen3 on 8, with 2
+ties. The paper-clustered 95% intervals were `[0.2142, 0.4157]` for Qwen3
+answer token F1 and `[0.2644, 0.4793]` for GPT-5. Citation F1 intervals were
+`[0.8160, 0.9427]` for Qwen3 and `[0.7809, 0.9214]` for GPT-5. These are
+individual-run intervals, not a paired interval for the difference, so the
+comparison does not establish statistical significance.
+
+Interpret the efficiency comparison cautiously. Local and API latency depend on
+different hardware and network paths, and provider token counts use different
+tokenizers. The evaluator also does not currently calculate OpenAI API cost, so
+its zero-cost field must not be interpreted as an actual API cost.
+
+This is not a strictly controlled model-only comparison. The Qwen3 artifact uses
+prompt `qasper-generation-v2`, while GPT-5 uses the citation-format correction
+in `qasper-generation-v3`. Both runs use the same 25 ordered case IDs and oracle
+evidence track.
 
 ### Three generation tasks
 
