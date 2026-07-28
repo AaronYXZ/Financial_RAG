@@ -10,7 +10,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from .generation_data import PaperPassage
 
 
-PROMPT_VERSION = "qasper-generation-v2"
+PROMPT_VERSION = "qasper-generation-v3"
 
 RESPONSE_CONTRACT = """Return exactly one JSON object with exactly these four keys:
 {"answer":"","abstain":true,"citations":[],"confidence":0.0}
@@ -19,7 +19,10 @@ Field requirements:
 - answer must be a JSON string of at most 120 words.
 - abstain must be a JSON boolean: true or false, never a quoted string.
 - citations must be a JSON array containing at most 5 passage ID strings copied
-  exactly from bracketed IDs in the context. Never construct or modify an ID.
+  exactly from the context labels, without the surrounding "[" and "]".
+  Never construct or otherwise modify an ID.
+- Example: for context label [paper::paragraph::0001], return
+  "citations":["paper::paragraph::0001"].
 - confidence must be a JSON number from 0.0 to 1.0, never a string such as
   "high", "medium", or "low".
 - If abstain is true, answer must be "" and citations must be [].

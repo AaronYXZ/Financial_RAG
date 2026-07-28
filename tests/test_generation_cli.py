@@ -14,7 +14,7 @@ def test_generation_run_defaults_to_local_qwen_smoke_test():
     assert args.provider == "local"
     assert args.model == "mlx-community/Qwen3-4B-Instruct-2507-4bit"
     assert args.max_context_tokens == 32_768
-    assert args.max_output_tokens == 512
+    assert args.max_output_tokens == 1024
     assert args.max_cases == 25
     assert args.retries == 1
     assert args.resume is True

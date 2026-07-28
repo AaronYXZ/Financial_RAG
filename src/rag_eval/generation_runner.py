@@ -157,7 +157,7 @@ def run_generation_cases(
     track: ContextTrack,
     output_file: Path,
     max_context_tokens: int = 32_768,
-    max_output_tokens: int = 512,
+    max_output_tokens: int = 1024,
     max_cases: int | None = 25,
     resume: bool = True,
     eligibility_file: Path | None = None,

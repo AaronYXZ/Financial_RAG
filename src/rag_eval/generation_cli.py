@@ -301,7 +301,7 @@ def _add_generation_arguments(
     )
     command.add_argument("--tokenizer", default="Qwen/Qwen3-4B-Instruct-2507")
     command.add_argument("--max-context-tokens", type=int, default=32_768)
-    command.add_argument("--max-output-tokens", type=int, default=512)
+    command.add_argument("--max-output-tokens", type=int, default=1024)
     if include_max_cases:
         command.add_argument("--max-cases", type=int, default=25)
     command.add_argument("--temperature", type=float, default=0.0)
@@ -379,7 +379,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--tokenizer", default="Qwen/Qwen3-4B-Instruct-2507")
     run.add_argument("--max-context-tokens", type=int, default=32_768)
-    run.add_argument("--max-output-tokens", type=int, default=512)
+    run.add_argument("--max-output-tokens", type=int, default=1024)
     run.add_argument("--max-cases", type=int, default=25)
     run.add_argument("--temperature", type=float, default=0.0)
     run.add_argument("--timeout", type=float, default=300.0)

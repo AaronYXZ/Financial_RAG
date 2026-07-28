@@ -174,7 +174,7 @@ rag-generation generate-oracle \
   --output-file results/generation/qasper-v1/predictions/qwen3-4b-oracle-v2.jsonl \
   --max-cases 25 \
   --max-context-tokens 32768 \
-  --max-output-tokens 512
+  --max-output-tokens 1024
 ```
 
 Use `generate-retrieved` to replay a previously frozen context manifest. This
@@ -187,7 +187,7 @@ rag-generation generate-retrieved \
   --context-manifest data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
   --output-file results/generation/qasper-v1/predictions/qwen3-4b-retrieved-bm25-top5-v1.jsonl \
   --max-context-tokens 32768 \
-  --max-output-tokens 512
+  --max-output-tokens 1024
 ```
 
 Use `generate-end-to-end` to run BM25 retrieval and generation in one command.
@@ -202,10 +202,10 @@ rag-generation generate-end-to-end \
   --context-manifest data/generation/qasper-v1/retrieval/end-to-end-bm25-top5-v1.json \
   --output-file results/generation/qasper-v1/predictions/qwen3-4b-end-to-end-bm25-top5-v1.jsonl \
   --max-context-tokens 32768 \
-  --max-output-tokens 512
+  --max-output-tokens 1024
 ```
 
-Prompt contract `qasper-generation-v2` declares exact JSON field types, requires
+Prompt contract `qasper-generation-v3` declares exact JSON field types, requires
 numeric confidence, repeats the contract after long contexts, and limits answer
 length and citation count. The runner calls the server's OpenAI-compatible chat
 endpoint sequentially,

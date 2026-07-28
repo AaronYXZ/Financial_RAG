@@ -20,10 +20,11 @@ def test_prompt_is_deterministic():
     prompt = render_user_prompt("What happened?", [PASSAGE])
 
     assert "[p1]\nEvidence." in prompt
-    assert PROMPT_VERSION == "qasper-generation-v2"
+    assert PROMPT_VERSION == "qasper-generation-v3"
     assert "confidence must be a JSON number from 0.0 to 1.0" in RESPONSE_CONTRACT
     assert "abstain must be a JSON boolean" in prompt
-    assert "Never construct or modify an ID" in prompt
+    assert 'without the surrounding "[" and "]"' in prompt
+    assert '"citations":["paper::paragraph::0001"]' in prompt
     assert prompt.index("Question:") < prompt.index("Response contract reminder:")
     assert prompt_hash(SYSTEM_PROMPT, prompt) == prompt_hash(SYSTEM_PROMPT, prompt)
 
