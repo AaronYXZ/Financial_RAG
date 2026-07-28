@@ -503,8 +503,8 @@ The console-script wrapper consumes that integer as the process exit status.
 - Context construction and token-count failures occur before the per-call error
   handler and currently stop the run.
 - The evaluator computes QASPER token F1, normalized exact match, citation evidence
-  overlap, Track B abstention, reliability, latency, and token summaries.
-  Calibration, confidence intervals, and judge scores remain future work.
+  overlap, Track B abstention and calibration, paper-clustered confidence
+  intervals, reliability, latency, and token summaries. Judge scores remain future work.
 
 ## 15. Source map
 
@@ -517,10 +517,10 @@ The console-script wrapper consumes that integer as the process exit status.
 | Prompt rendering, hash, and validation | [`src/rag_eval/generation_prompt.py`](src/rag_eval/generation_prompt.py) |
 | Local HTTP and tokenizer adapter | [`src/rag_eval/generation_adapter.py`](src/rag_eval/generation_adapter.py) |
 | Case loop, eligibility, persistence, resume | [`src/rag_eval/generation_runner.py`](src/rag_eval/generation_runner.py) |
-| Stage 0 to 5 metrics | [`src/rag_eval/generation_metrics.py`](src/rag_eval/generation_metrics.py) |
+| Stage 0 to 6 metrics | [`src/rag_eval/generation_metrics.py`](src/rag_eval/generation_metrics.py) |
 | Smoke-test command | [`README.md`](README.md) |
 
-## 16. Stage 0 to 5 metric execution
+## 16. Stage 0 to 6 metric execution
 
 Run metrics only after `rag-generation run` has created both the prediction JSONL
 and its eligibility sidecar:
@@ -545,11 +545,13 @@ flowchart LR
     Quality --> Citations["aggregate_citation_quality()"]
     Quality --> Abstention["aggregate_abstention_quality()"]
     Quality --> Confidence["aggregate_confidence_and_calibration()"]
+    Quality --> Bootstrap["paper_clustered_bootstrap_intervals()"]
     Reliability --> Summary["summary.json"]
     Aggregate --> Summary
     Citations --> Summary
     Abstention --> Summary
     Confidence --> Summary
+    Bootstrap --> Summary
     Join --> Records["evaluation_records.jsonl"]
     Quality --> PerCase["per_case_metrics.jsonl"]
 ```
@@ -578,7 +580,9 @@ The evaluator takes these steps:
     false-decision quality, or continuous answer token F1. Report confidence
     availability, ten-bin expected calibration error, and a tie-grouped
     risk-coverage curve with its discrete area.
-11. Write evaluation records, per-case scores, and the aggregate summary.
+11. Resample whole papers 10,000 times with fixed seed `42`, recompute applicable
+    quality aggregates, and attach two-sided 95 percent percentile intervals.
+12. Write evaluation records, per-case scores, and the aggregate summary.
 
 Invalid and missing predictions receive zero answer quality. They remain in the
 eligible-case denominator, which prevents failed calls from inflating the score.

@@ -16,6 +16,7 @@ from rag_eval.generation_metrics import (
     evaluate_prediction_files,
     normalize_answer,
     normalized_exact_match,
+    paper_clustered_bootstrap_intervals,
     reference_answer,
     reliability_and_efficiency,
     score_answer_record,
@@ -264,6 +265,8 @@ def test_evaluator_writes_stage_zero_to_five_artifacts(tmp_path: Path):
     assert summary["citation_quality"]["citation_f1"] == 1.0
     assert summary["abstention_quality"]["applicable"] is False
     assert summary["confidence_and_calibration"]["applicable"] is False
+    assert summary["paper_clustered_bootstrap"]["resamples"] == 10_000
+    assert summary["paper_clustered_bootstrap"]["paper_count"] == 1
     assert (output_dir / "evaluation_records.jsonl").is_file()
     assert (output_dir / "per_case_metrics.jsonl").is_file()
     assert json.loads((output_dir / "summary.json").read_text()) == summary
@@ -642,3 +645,78 @@ def test_risk_coverage_groups_confidence_ties():
     assert len(summary["risk_coverage_curve"]) == 1
     assert summary["risk_coverage_curve"][0]["coverage"] == 1.0
     assert summary["area_under_risk_coverage_curve"] == 0.5
+
+
+def test_paper_clustered_bootstrap_is_deterministic_and_resamples_whole_papers():
+    paper_one_case = make_case(
+        "paper-one-a",
+        (make_reference("paper-one-a-reference", text="correct"),),
+    )
+    paper_one_case = replace(paper_one_case, paper_id="paper-one")
+    paper_one_second_case = replace(
+        paper_one_case,
+        case_id="paper-one-b",
+        references=(make_reference("paper-one-b-reference", text="correct"),),
+    )
+    paper_two_case = make_case(
+        "paper-two-a",
+        (make_reference("paper-two-reference", text="different"),),
+    )
+    paper_two_case = replace(paper_two_case, paper_id="paper-two")
+
+    def scored(case: GenerationCase, answer: str):
+        return score_answer_record(
+            EvaluationRecord(
+                case,
+                "oracle-evidence",
+                "test-model",
+                "valid",
+                prediction(
+                    case.case_id,
+                    parsed_response={
+                        "answer": answer,
+                        "abstain": False,
+                        "citations": [PASSAGE.passage_id],
+                        "confidence": 0.8,
+                    },
+                ),
+                0,
+            )
+        )
+
+    per_case = [
+        scored(paper_one_case, "correct"),
+        scored(paper_one_second_case, "correct"),
+        scored(paper_two_case, "wrong"),
+    ]
+    first = paper_clustered_bootstrap_intervals(
+        per_case,
+        track="oracle-evidence",
+        resamples=500,
+        seed=7,
+    )
+    second = paper_clustered_bootstrap_intervals(
+        per_case,
+        track="oracle-evidence",
+        resamples=500,
+        seed=7,
+    )
+
+    assert first == second
+    assert first["paper_count"] == 2
+    token_f1 = first["intervals"]["answer.token_f1"]
+    assert token_f1["point_estimate"] == pytest.approx(2 / 3)
+    assert token_f1["lower"] == 0.0
+    assert token_f1["upper"] == 1.0
+    assert token_f1["valid_resample_count"] == 500
+
+
+def test_paper_clustered_bootstrap_validates_configuration():
+    with pytest.raises(ValueError, match="resamples"):
+        paper_clustered_bootstrap_intervals([], track="oracle-evidence", resamples=0)
+    with pytest.raises(ValueError, match="confidence_level"):
+        paper_clustered_bootstrap_intervals(
+            [],
+            track="oracle-evidence",
+            confidence_level=1.0,
+        )

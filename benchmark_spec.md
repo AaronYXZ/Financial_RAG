@@ -888,6 +888,22 @@ thresholds before the held-out test run, not after seeing test results.
 Report macro means over cases and paired bootstrap 95 percent confidence intervals
 with at least 10,000 paper-clustered resamples. Cluster by `paper_id` because
 questions from the same paper are not independent.
+Use this frozen Stage 6 single-run interval policy:
+
+- resample `paper_id` clusters with replacement, drawing the observed number of
+  papers in every replicate
+- include every question belonging to each selected paper, including repeated
+  copies when a paper is drawn more than once
+- use 10,000 replicates and random seed `42`
+- calculate two-sided 95 percent percentile intervals
+- retain case-macro aggregation inside each replicate
+- report the number of valid replicates for metrics that can be undefined in a
+  resample, such as citation or abstention precision
+- attach intervals to answer quality and citation metrics on both tracks
+- additionally attach intervals to abstention and confidence metrics on Track B
+
+Paired model-difference intervals remain part of the comparison-report workflow.
+
 
 For pairwise model comparisons, bootstrap the paired per-case difference and
 report the interval and win probability. Treat overlapping intervals as
@@ -1020,7 +1036,7 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
 - [x] Implement citation precision, recall, F1, validity, and coverage metrics.
 - [x] Implement basic Track B abstention and answerability metrics.
 - [x] Implement risk-coverage and calibration metrics.
-- [ ] Implement paper-clustered bootstrap confidence intervals.
+- [x] Implement paper-clustered bootstrap confidence intervals.
 - [ ] Add the blinded claim-support and completeness evaluator.
 - [ ] Complete the stratified human-audit workflow.
 - [ ] Run validation baselines and freeze thresholds.

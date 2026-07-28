@@ -1,5 +1,29 @@
 # Development History
 
+## 2026-07-27. Paper-clustered bootstrap intervals, Stage 6
+
+### Implemented
+
+- Added deterministic paper-clustered bootstrap resampling with seed `42`.
+- Added 10,000-resample, two-sided 95 percent percentile intervals.
+- Resampled observed papers with replacement and retained every question from a
+  selected paper, preserving within-paper dependence.
+- Added intervals for answer token F1, normalized exact match, citation precision,
+  recall, F1, validity, and answered-with-citation rate on both tracks.
+- Added Track B intervals for answerability accuracy, abstention precision, recall,
+  F1, false-answer rate, false-abstention rate, expected calibration error, and
+  area under the risk-coverage curve.
+- Reported valid replicate counts for conditionally undefined metrics.
+- Persisted method, clustering unit, confidence level, resample count, seed, paper
+  count, and case count in `summary.json`.
+- Added tests proving fixed-seed determinism and whole-paper cluster behavior.
+
+### Scope boundary
+
+Stage 6 covers confidence intervals for one evaluated prediction file. Paired
+bootstrap intervals for direct model differences belong to the later comparison
+report workflow, which must join identical cases before resampling.
+
 ## 2026-07-27. Confidence calibration and risk-coverage, Stage 5
 
 ### Implemented

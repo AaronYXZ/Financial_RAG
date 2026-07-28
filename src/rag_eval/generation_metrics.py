@@ -1,9 +1,10 @@
-"""Stage 0-5 evaluation for fixed-context QASPER generation runs."""
+"""Stage 0-6 evaluation for fixed-context QASPER generation runs."""
 
 from __future__ import annotations
 
 import json
 import math
+import random
 import re
 import string
 from collections import Counter, defaultdict
@@ -23,6 +24,10 @@ EVALUATION_STATUSES = (
     "timeout",
     "missing_prediction",
 )
+
+BOOTSTRAP_RESAMPLES = 10_000
+BOOTSTRAP_SEED = 42
+BOOTSTRAP_CONFIDENCE_LEVEL = 0.95
 
 
 @dataclass(frozen=True)
@@ -398,6 +403,10 @@ def evaluate_prediction_files(
         "citation_quality": aggregate_citation_quality(per_case),
         "abstention_quality": aggregate_abstention_quality(per_case, track=track),
         "confidence_and_calibration": aggregate_confidence_and_calibration(
+            per_case,
+            track=track,
+        ),
+        "paper_clustered_bootstrap": paper_clustered_bootstrap_intervals(
             per_case,
             track=track,
         ),
@@ -888,4 +897,119 @@ def aggregate_confidence_and_calibration(
         "calibration_bins": bins,
         "area_under_risk_coverage_curve": aurc,
         "risk_coverage_curve": curve,
+    }
+
+
+def _bootstrap_point_estimates(
+    per_case: Sequence[Mapping[str, Any]],
+    *,
+    track: str,
+) -> dict[str, float]:
+    answer = aggregate_answer_quality(per_case)
+    citation = aggregate_citation_quality(per_case)
+    estimates: dict[str, float | None] = {
+        "answer.token_f1": answer["token_f1"],
+        "answer.normalized_exact_match": answer["normalized_exact_match"],
+        "citation.precision": citation["citation_precision"],
+        "citation.recall": citation["citation_recall"],
+        "citation.f1": citation["citation_f1"],
+        "citation.validity_rate": citation["citation_validity_rate"],
+        "citation.answered_with_citation_rate": citation[
+            "answered_with_citation_rate"
+        ],
+    }
+
+    if track == "complete-paper":
+        abstention = aggregate_abstention_quality(per_case, track=track)
+        calibration = aggregate_confidence_and_calibration(per_case, track=track)
+        estimates.update(
+            {
+                "abstention.answerability_accuracy": abstention[
+                    "answerability_accuracy"
+                ],
+                "abstention.precision": abstention["abstention_precision"],
+                "abstention.recall": abstention["abstention_recall"],
+                "abstention.f1": abstention["abstention_f1"],
+                "abstention.false_answer_rate": abstention["false_answer_rate"],
+                "abstention.false_abstention_rate": abstention[
+                    "false_abstention_rate"
+                ],
+                "confidence.expected_calibration_error": calibration[
+                    "expected_calibration_error"
+                ],
+                "confidence.area_under_risk_coverage_curve": calibration[
+                    "area_under_risk_coverage_curve"
+                ],
+            }
+        )
+
+    return {
+        metric: float(value)
+        for metric, value in estimates.items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+
+
+def paper_clustered_bootstrap_intervals(
+    per_case: Sequence[Mapping[str, Any]],
+    *,
+    track: str,
+    resamples: int = BOOTSTRAP_RESAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+    confidence_level: float = BOOTSTRAP_CONFIDENCE_LEVEL,
+) -> dict[str, Any]:
+    """Calculate percentile intervals by resampling whole QASPER papers."""
+
+    if resamples <= 0:
+        raise ValueError("resamples must be positive")
+    if not 0.0 < confidence_level < 1.0:
+        raise ValueError("confidence_level must be between 0 and 1")
+
+    by_paper: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for item in per_case:
+        paper_id = item.get("paper_id")
+        if not isinstance(paper_id, str) or not paper_id:
+            raise ValueError("Every per-case metric row must have a paper_id")
+        by_paper[paper_id].append(item)
+
+    paper_ids = sorted(by_paper)
+    point_estimates = _bootstrap_point_estimates(per_case, track=track)
+    samples: dict[str, list[float]] = {
+        metric: [] for metric in point_estimates
+    }
+    if paper_ids:
+        random_generator = random.Random(seed)
+        for _ in range(resamples):
+            sampled_rows: list[Mapping[str, Any]] = []
+            for paper_id in random_generator.choices(
+                paper_ids,
+                k=len(paper_ids),
+            ):
+                sampled_rows.extend(by_paper[paper_id])
+            replicate = _bootstrap_point_estimates(sampled_rows, track=track)
+            for metric in samples:
+                value = replicate.get(metric)
+                if value is not None:
+                    samples[metric].append(value)
+
+    alpha = (1.0 - confidence_level) / 2.0
+    intervals: dict[str, dict[str, Any]] = {}
+    for metric, point_estimate in point_estimates.items():
+        values = samples[metric]
+        intervals[metric] = {
+            "point_estimate": point_estimate,
+            "lower": _percentile(values, alpha) if values else None,
+            "upper": _percentile(values, 1.0 - alpha) if values else None,
+            "valid_resample_count": len(values),
+        }
+
+    return {
+        "method": "percentile_cluster_bootstrap",
+        "cluster_unit": "paper_id",
+        "confidence_level": confidence_level,
+        "resamples": resamples,
+        "seed": seed,
+        "paper_count": len(paper_ids),
+        "case_count": len(per_case),
+        "intervals": intervals,
     }
