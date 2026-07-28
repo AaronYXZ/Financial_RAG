@@ -963,9 +963,13 @@ QASPER license and provider terms permit.
 - Track A includes only annotated evidence IDs
 - Track B serializes every normalized paper passage exactly once
 - complete-paper eligibility is computed before model execution
+- retrieved-context uses a checksummed frozen context manifest
+- frozen retrieval records the retriever implementation, parameters, top K,
+  source case checksum, and source eligibility checksum
+- retrieved-context preserves the ordered eligible case IDs from its source track
 - prompt serialization and hash are deterministic
 - different generators receive byte-identical prompts for a case and track
-- no retrieval or reranking component is called
+- no retrieval or reranking component is called during generation
 
 ### 27.3 Response and metric tests
 

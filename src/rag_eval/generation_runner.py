@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from .generation_adapter import GenerationAdapter
 from .generation_context import ContextTrack, build_fixed_context
@@ -17,6 +17,7 @@ from .generation_prompt import (
     prompt_hash,
     render_user_prompt,
 )
+from .generation_retrieval import unique_passages
 
 
 @dataclass(frozen=True)
@@ -58,20 +59,37 @@ def _select_eligible_cases(
     max_context_tokens: int,
     max_output_tokens: int,
     max_cases: int | None,
+    retrieved_contexts: Mapping[str, tuple[str, ...]] | None = None,
 ) -> tuple[list[EligibleCase], dict[str, int]]:
     eligible: list[EligibleCase] = []
     exclusions = {"track_filter": 0, "context_limit": 0}
-    for case in cases:
+    case_list = list(cases)
+    passage_lookup = unique_passages(case_list)
+    for case in case_list:
         if track == "oracle-evidence" and case.answerability != "answerable":
             exclusions["track_filter"] += 1
             continue
         if track == "complete-paper" and case.answerability == "ambiguous":
             exclusions["track_filter"] += 1
             continue
+        if track == "retrieved-context" and (
+            retrieved_contexts is None or case.case_id not in retrieved_contexts
+        ):
+            exclusions["track_filter"] += 1
+            continue
         if max_cases is not None and len(eligible) >= max_cases:
             break
 
-        passages = build_fixed_context(case, track)
+        passages = build_fixed_context(
+            case,
+            track,
+            retrieved_passage_ids=(
+                retrieved_contexts[case.case_id]
+                if track == "retrieved-context" and retrieved_contexts is not None
+                else None
+            ),
+            passage_lookup=passage_lookup,
+        )
         user_prompt = render_user_prompt(case.question, passages)
         input_tokens = adapter.count_tokens(SYSTEM_PROMPT, user_prompt)
         if input_tokens + max_output_tokens > max_context_tokens:
@@ -99,6 +117,7 @@ def _write_eligibility_manifest(
     max_output_tokens: int,
     max_cases: int | None,
     overwrite: bool,
+    context_manifest_sha256: str | None,
 ) -> None:
     payload = {
         "schema_version": 2,
@@ -112,6 +131,8 @@ def _write_eligibility_manifest(
         "eligible_case_ids": [item.case.case_id for item in eligible],
         "excluded_counts": exclusions,
     }
+    if context_manifest_sha256 is not None:
+        payload["context_manifest_sha256"] = context_manifest_sha256
     if path.exists() and not overwrite:
         existing = json.loads(path.read_text(encoding="utf-8"))
         if existing != payload:
@@ -138,15 +159,30 @@ def run_generation_cases(
     max_cases: int | None = 25,
     resume: bool = True,
     eligibility_file: Path | None = None,
+    retrieved_contexts: Mapping[str, tuple[str, ...]] | None = None,
+    context_manifest_sha256: str | None = None,
 ) -> dict[str, int]:
+    case_list = list(cases)
+    if track == "retrieved-context":
+        if retrieved_contexts is None or not context_manifest_sha256:
+            raise ValueError(
+                "The retrieved-context track requires frozen contexts and their manifest hash"
+            )
+        cases_by_id = {case.case_id: case for case in case_list}
+        missing = [case_id for case_id in retrieved_contexts if case_id not in cases_by_id]
+        if missing:
+            raise ValueError(f"Frozen context cases are missing from the case file: {missing[:3]}")
+        case_list = [cases_by_id[case_id] for case_id in retrieved_contexts]
+
     output_file.parent.mkdir(parents=True, exist_ok=True)
     eligible, exclusions = _select_eligible_cases(
-        cases,
+        case_list,
         adapter=adapter,
         track=track,
         max_context_tokens=max_context_tokens,
         max_output_tokens=max_output_tokens,
         max_cases=max_cases,
+        retrieved_contexts=retrieved_contexts,
     )
     _write_eligibility_manifest(
         eligibility_file or eligibility_manifest_path(output_file),
@@ -158,6 +194,7 @@ def run_generation_cases(
         max_output_tokens=max_output_tokens,
         max_cases=max_cases,
         overwrite=not resume,
+        context_manifest_sha256=context_manifest_sha256,
     )
 
     completed = _completed_keys(output_file) if resume else set()
@@ -189,6 +226,8 @@ def run_generation_cases(
                 "prompt_hash": prompt_hash(SYSTEM_PROMPT, item.user_prompt),
                 "counted_input_tokens": item.input_tokens,
             }
+            if context_manifest_sha256 is not None:
+                row["context_manifest_sha256"] = context_manifest_sha256
             error_stage = "generation"
             try:
                 result = adapter.generate(SYSTEM_PROMPT, item.user_prompt)

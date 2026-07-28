@@ -505,7 +505,7 @@ def test_abstention_metrics_are_not_applicable_to_oracle_evidence_track():
 
     assert summary == {
         "applicable": False,
-        "reason": "Abstention metrics require the complete-paper track",
+        "reason": "Abstention metrics require a non-oracle context track",
         "case_count": 1,
     }
 

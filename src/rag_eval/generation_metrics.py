@@ -28,6 +28,7 @@ EVALUATION_STATUSES = (
 BOOTSTRAP_RESAMPLES = 10_000
 BOOTSTRAP_SEED = 42
 BOOTSTRAP_CONFIDENCE_LEVEL = 0.95
+ANSWERABILITY_TRACKS = ("complete-paper", "retrieved-context")
 
 
 @dataclass(frozen=True)
@@ -579,7 +580,7 @@ def score_abstention_record(record: EvaluationRecord) -> dict[str, Any]:
         "unanswerable": True,
         "ambiguous": None,
     }.get(record.case.answerability)
-    if record.track != "complete-paper":
+    if record.track not in ANSWERABILITY_TRACKS:
         return {
             "abstention_primary_eligible": False,
             "expected_abstain": expected_abstain,
@@ -629,10 +630,10 @@ def aggregate_abstention_quality(
     *,
     track: str,
 ) -> dict[str, Any]:
-    if track != "complete-paper":
+    if track not in ANSWERABILITY_TRACKS:
         return {
             "applicable": False,
-            "reason": "Abstention metrics require the complete-paper track",
+            "reason": "Abstention metrics require a non-oracle context track",
             "case_count": len(per_case),
         }
 
@@ -731,7 +732,7 @@ def score_confidence_record(
         "declared_confidence": None,
         "calibration_quality_score": None,
     }
-    if record.track != "complete-paper" or record.case.answerability == "ambiguous":
+    if record.track not in ANSWERABILITY_TRACKS or record.case.answerability == "ambiguous":
         return result
 
     result["confidence_primary_eligible"] = True
@@ -865,10 +866,10 @@ def aggregate_confidence_and_calibration(
 ) -> dict[str, Any]:
     """Aggregate Track B ECE and confidence-threshold risk-coverage."""
 
-    if track != "complete-paper":
+    if track not in ANSWERABILITY_TRACKS:
         return {
             "applicable": False,
-            "reason": "Confidence calibration requires the complete-paper track",
+            "reason": "Confidence calibration requires a non-oracle context track",
             "case_count": len(per_case),
         }
 
@@ -919,7 +920,7 @@ def _bootstrap_point_estimates(
         ],
     }
 
-    if track == "complete-paper":
+    if track in ANSWERABILITY_TRACKS:
         abstention = aggregate_abstention_quality(per_case, track=track)
         calibration = aggregate_confidence_and_calibration(per_case, track=track)
         estimates.update(

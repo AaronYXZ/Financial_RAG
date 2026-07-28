@@ -1,5 +1,29 @@
 # Development History
 
+## 2026-07-27. Matched prompt comparison and frozen retrieved context
+
+### Implemented
+
+- Aligned default Track A prediction and metric paths under one run ID.
+- Added matched response-validity comparison with a hard check for identical,
+  ordered eligible case IDs.
+- Added a dependency-free BM25 context freezer over normalized QASPER passages.
+- Recorded cases and eligibility checksums, retriever implementation and
+  parameters, top K, ordered case IDs, passage rankings, and scores.
+- Added the `retrieved-context` generation track, which requires the frozen
+  manifest and records its checksum in eligibility and prediction artifacts.
+- Extended answerability, abstention, calibration, and bootstrap metrics to the
+  retrieved-context track.
+- Added CLI commands, validation, and tests for the comparison and retrieval
+  workflow.
+
+### Observed local baseline
+
+- Track A prompt v2 completed 25 of 25 cases with valid responses.
+- Track B prompt v1 completed 11 of 25 cases with valid responses.
+- Track B prompt v2 completed 16 of 25 cases with valid responses on the same
+  ordered case IDs.
+
 ## 2026-07-27. Paper-clustered bootstrap intervals, Stage 6
 
 ### Implemented

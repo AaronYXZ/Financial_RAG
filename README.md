@@ -99,9 +99,12 @@ creates one case per QASPER question, preserves all reference annotations, maps
 annotated evidence to stable passage IDs, and writes a checksummed manifest.
 Downloaded data and normalized cases remain under the ignored `data/` directory.
 
-The generation experiment runner is under active implementation. Its design uses
-separate oracle-evidence and complete-paper tracks so answer quality and abstention
-are not conflated.
+The generation experiment runner has three diagnostic tracks:
+
+- `oracle-evidence` is the primary controlled generator benchmark.
+- `complete-paper` is the long-context answerability and calibration diagnostic.
+- `retrieved-context` consumes a frozen top-K retrieval manifest, so retrieval is
+  never rerun during generation and every model receives identical context.
 
 Execution walkthrough: [generation smoke-test execution flow](generation_smoke_test_execution.md).
 
@@ -130,10 +133,43 @@ length and citation count. The runner calls the server's OpenAI-compatible chat
 endpoint sequentially,
 counts tokens with the original Qwen tokenizer, rejects prompts that exceed the
 shared context limit, validates the strict JSON response, and appends predictions
-to `results/generation/qasper-v1/predictions/qwen3-4b-track-b-v1.jsonl`. Repeating the
-command resumes from existing case, track, model, and prompt-version records. It also writes
-`qwen3-4b-track-b-v1.eligibility.json`, which freezes the eligible case IDs used as
-the metric denominator. Use `--no-resume` to overwrite the output.
+to `results/generation/qasper-v1/predictions/qwen3-4b-track-a-v2.jsonl`.
+Repeating the command resumes from existing case, track, model, and
+prompt-version records. It also writes `qwen3-4b-track-a-v2.eligibility.json`,
+which freezes the eligible case IDs used as the metric denominator. Use
+`--no-resume` to overwrite the output.
+
+Use explicit, track-specific output paths when running a comparison. The prompt-v2
+25-case baseline uses `qwen3-4b-track-a-v2.jsonl` for Track A and
+`qwen3-4b-track-b-v2.jsonl` for Track B. The observed local runs used identical
+eligible case IDs. Track A produced 25 valid responses, while Track B improved
+from 11 valid responses with prompt v1 to 16 with prompt v2.
+
+Validate the matched response-status change with:
+
+```bash
+rag-generation compare-responses \
+  --baseline-predictions-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v1.jsonl \
+  --baseline-eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v1.eligibility.json \
+  --candidate-predictions-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.jsonl \
+  --candidate-eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --output-file results/generation/qasper-v1/comparisons/track-b-prompt-v1-v2.json
+```
+
+Freeze a BM25 top-five context set from the same Track B denominator, then run the
+retrieved-context track:
+
+```bash
+rag-generation freeze-context \
+  --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --output-file data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
+  --top-k 5
+
+rag-generation run \
+  --track retrieved-context \
+  --context-manifest data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
+  --output-file results/generation/qasper-v1/predictions/qwen3-4b-retrieved-bm25-top5-v1.jsonl
+```
 
 After the generation run, calculate Stage 0 to 6 metrics:
 
@@ -145,7 +181,7 @@ The command joins cases and predictions by `case_id`, scores every eligible case
 and writes:
 
 ```text
-results/generation/qasper-v1/metrics/qwen3-4b-smoke/
+results/generation/qasper-v1/metrics/qwen3-4b-track-a-v2/
   evaluation_records.jsonl
   per_case_metrics.jsonl
   summary.json
@@ -155,10 +191,11 @@ The summary includes response-status rates, retries, latency, token usage, local
 inference cost, official QASPER token F1, normalized exact match, citation
 precision, citation recall, citation F1, citation validity, and citation coverage.
 Missing and invalid predictions remain visible in the denominator. Complete-paper
-runs also report answerability accuracy, abstention precision, recall, F1, false
+and retrieved-context runs also report answerability accuracy, abstention
+precision, recall, F1, false
 answers, false abstentions, no decisions, a confusion matrix, confidence
 availability, expected calibration error, a risk-coverage curve, and its area.
-Both tracks include deterministic 95 percent percentile intervals from 10,000
+All tracks include deterministic 95 percent percentile intervals from 10,000
 paper-clustered bootstrap resamples. Rubric metrics remain a future stage.
 
 ## Evaluation design

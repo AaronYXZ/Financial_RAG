@@ -114,3 +114,34 @@ def test_resume_rejects_a_changed_eligibility_denominator(tmp_path: Path):
             output_file=output,
             max_cases=None,
         )
+
+
+def test_runner_uses_frozen_retrieved_context_and_records_manifest_hash(tmp_path: Path):
+    output = tmp_path / "retrieved.jsonl"
+    counts = run_generation_cases(
+        [CASE],
+        adapter=FakeAdapter(),
+        track="retrieved-context",
+        output_file=output,
+        max_cases=None,
+        retrieved_contexts={CASE.case_id: (PASSAGE.passage_id,)},
+        context_manifest_sha256="abc123",
+    )
+
+    assert counts["completed"] == 1
+    row = json.loads(output.read_text())
+    assert row["context_passage_ids"] == [PASSAGE.passage_id]
+    assert row["context_manifest_sha256"] == "abc123"
+    manifest = json.loads(eligibility_manifest_path(output).read_text())
+    assert manifest["track"] == "retrieved-context"
+    assert manifest["context_manifest_sha256"] == "abc123"
+
+
+def test_runner_requires_frozen_context_identity(tmp_path: Path):
+    with pytest.raises(ValueError, match="requires frozen contexts"):
+        run_generation_cases(
+            [CASE],
+            adapter=FakeAdapter(),
+            track="retrieved-context",
+            output_file=tmp_path / "retrieved.jsonl",
+        )
