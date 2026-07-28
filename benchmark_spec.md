@@ -679,14 +679,20 @@ with every prediction.
 
 ## 19. Prompt and response contract
 
-Freeze one system prompt before the reportable validation run:
+Freeze prompt contract `qasper-generation-v2` before the reportable validation run:
 
 ```text
 Answer the question using only the supplied context.
 If the context does not support an answer, abstain.
 Every factual answer must cite one or more supplied passage IDs.
-Return exactly one JSON object with keys answer, abstain, citations, and confidence.
-Do not include markdown or additional text.
+
+Return exactly one JSON object with exactly the keys `answer`, `abstain`,
+`citations`, and `confidence`. `answer` is a string of at most 120 words;
+`abstain` is an unquoted JSON boolean; `citations` is an array of at most 5 IDs
+copied exactly from bracketed context IDs; and `confidence` is a numeric value
+from 0.0 to 1.0, never a qualitative string. An abstention must use an empty
+answer and citation list. Return no markdown, comments, explanations, or extra
+keys. Repeat this contract after the question.
 ```
 
 The response schema is:
@@ -703,6 +709,8 @@ The response schema is:
 Validation rules:
 
 - the object has exactly the four declared keys
+- the prediction and eligibility manifest declare `qasper-generation-v2`
+- the answer contains at most 120 words and citations contain at most 5 IDs
 - `confidence` is numeric and in `[0, 1]`
 - citations contain only passage IDs present in the supplied context
 - a non-abstaining answer is non-empty and has at least one citation

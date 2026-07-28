@@ -11,6 +11,7 @@ from .generation_adapter import GenerationAdapter
 from .generation_context import ContextTrack, build_fixed_context
 from .generation_data import GenerationCase
 from .generation_prompt import (
+    PROMPT_VERSION,
     SYSTEM_PROMPT,
     parse_generation_response,
     prompt_hash,
@@ -26,15 +27,22 @@ class EligibleCase:
     input_tokens: int
 
 
-def _completed_keys(path: Path) -> set[tuple[str, str, str]]:
+def _completed_keys(path: Path) -> set[tuple[str, str, str, str | None]]:
     if not path.exists():
         return set()
-    completed: set[tuple[str, str, str]] = set()
+    completed: set[tuple[str, str, str, str | None]] = set()
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             row = json.loads(line)
             if row.get("error") is None:
-                completed.add((row["case_id"], row["track"], row["model_id"]))
+                completed.add(
+                    (
+                        row["case_id"],
+                        row["track"],
+                        row["model_id"],
+                        row.get("prompt_version"),
+                    )
+                )
     return completed
 
 
@@ -93,7 +101,8 @@ def _write_eligibility_manifest(
     overwrite: bool,
 ) -> None:
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "prompt_version": PROMPT_VERSION,
         "track": track,
         "model_id": adapter.model_id,
         "max_context_tokens": max_context_tokens,
@@ -163,7 +172,7 @@ def run_generation_cases(
     with output_file.open("a" if resume else "w", encoding="utf-8") as handle:
         for item in eligible:
             case = item.case
-            key = (case.case_id, track, adapter.model_id)
+            key = (case.case_id, track, adapter.model_id, PROMPT_VERSION)
             if key in completed:
                 counts["skipped"] += 1
                 continue
@@ -176,6 +185,7 @@ def run_generation_cases(
                 "model_id": adapter.model_id,
                 "answerability": case.answerability,
                 "context_passage_ids": list(item.context_passage_ids),
+                "prompt_version": PROMPT_VERSION,
                 "prompt_hash": prompt_hash(SYSTEM_PROMPT, item.user_prompt),
                 "counted_input_tokens": item.input_tokens,
             }

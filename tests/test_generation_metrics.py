@@ -77,6 +77,7 @@ def prediction(case_id: str, **overrides):
         "case_id": case_id,
         "track": "oracle-evidence",
         "model_id": "test-model",
+        "prompt_version": "qasper-generation-v2",
         "context_passage_ids": [PASSAGE.passage_id],
         "parsed_response": {
             "answer": "relevant result",
@@ -239,6 +240,7 @@ def test_evaluator_writes_stage_zero_to_four_artifacts(tmp_path: Path):
                 "schema_version": 1,
                 "track": "oracle-evidence",
                 "model_id": "test-model",
+                "prompt_version": "qasper-generation-v2",
                 "eligible_case_count": 1,
                 "eligible_case_ids": ["q1"],
             }
@@ -256,6 +258,7 @@ def test_evaluator_writes_stage_zero_to_four_artifacts(tmp_path: Path):
         model_id="test-model",
     )
 
+    assert summary["prompt_version"] == "qasper-generation-v2"
     assert summary["answer_quality"]["token_f1"] == 1.0
     assert summary["citation_quality"]["citation_f1"] == 1.0
     assert summary["abstention_quality"]["applicable"] is False

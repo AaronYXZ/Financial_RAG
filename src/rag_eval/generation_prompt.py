@@ -10,11 +10,28 @@ from typing import Any, Iterable, Mapping, Sequence
 from .generation_data import PaperPassage
 
 
-SYSTEM_PROMPT = """Answer the question using only the supplied context.
+PROMPT_VERSION = "qasper-generation-v2"
+
+RESPONSE_CONTRACT = """Return exactly one JSON object with exactly these four keys:
+{"answer":"","abstain":true,"citations":[],"confidence":0.0}
+
+Field requirements:
+- answer must be a JSON string of at most 120 words.
+- abstain must be a JSON boolean: true or false, never a quoted string.
+- citations must be a JSON array containing at most 5 passage ID strings copied
+  exactly from bracketed IDs in the context. Never construct or modify an ID.
+- confidence must be a JSON number from 0.0 to 1.0, never a string such as
+  "high", "medium", or "low".
+- If abstain is true, answer must be "" and citations must be [].
+- If abstain is false, answer must be non-empty and citations must contain at
+  least one exact context passage ID.
+- Do not include markdown, code fences, comments, explanations, or additional keys."""
+
+SYSTEM_PROMPT = f"""Answer the question using only the supplied context.
 If the context does not support an answer, abstain.
 Every factual answer must cite one or more supplied passage IDs.
-Return exactly one JSON object with keys answer, abstain, citations, and confidence.
-Do not include markdown or additional text."""
+
+{RESPONSE_CONTRACT}"""
 
 
 @dataclass(frozen=True)
@@ -29,7 +46,11 @@ def render_user_prompt(question: str, passages: Sequence[PaperPassage]) -> str:
     context = "\n\n".join(
         f"[{passage.passage_id}]\n{passage.text}" for passage in passages
     )
-    return f"Context:\n{context}\n\nQuestion:\n{question}\n"
+    return (
+        f"Context:\n{context}\n\n"
+        f"Question:\n{question}\n\n"
+        f"Response contract reminder:\n{RESPONSE_CONTRACT}\n"
+    )
 
 
 def prompt_hash(system_prompt: str, user_prompt: str) -> str:
@@ -65,6 +86,10 @@ def parse_generation_response(
         isinstance(item, str) for item in payload["citations"]
     ):
         raise ValueError("citations must be a list of strings")
+    if len(payload["answer"].split()) > 120:
+        raise ValueError("answer must contain at most 120 words")
+    if len(payload["citations"]) > 5:
+        raise ValueError("citations must contain at most 5 passage IDs")
     confidence = payload["confidence"]
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
         raise ValueError("confidence must be numeric")

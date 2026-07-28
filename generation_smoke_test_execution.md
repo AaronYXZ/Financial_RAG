@@ -268,7 +268,8 @@ No retriever, embedding model, BM25 search, hybrid fusion, or reranker is called
 
 ## 7. Prompt construction
 
-The frozen system prompt is `SYSTEM_PROMPT` from
+The frozen prompt contract is `qasper-generation-v2`, exposed through
+`PROMPT_VERSION` and `SYSTEM_PROMPT` from
 [`generation_prompt.py`](src/rag_eval/generation_prompt.py).
 
 `render_user_prompt()` serializes the selected passages as:
@@ -283,6 +284,9 @@ Context:
 
 Question:
 <question>
+
+Response contract reminder:
+<exact JSON types, numeric confidence, abstention rules, and citation rules>
 ```
 
 The exact system and user strings have two consumers:
@@ -291,7 +295,8 @@ The exact system and user strings have two consumers:
 2. `adapter.generate()` sends the same strings to the model server.
 
 `prompt_hash()` also consumes both strings and stores their deterministic SHA-256
-in the prediction row.
+in the prediction row. The prediction and eligibility manifest also store
+`prompt_version`, and resume identity includes it.
 
 ## 8. Token eligibility
 
@@ -386,6 +391,7 @@ The model must return exactly one JSON object:
 - exactly four keys: `answer`, `abstain`, `citations`, and `confidence`
 - correct value types
 - confidence in the inclusive range `[0, 1]`
+- answer length of at most 120 words and no more than 5 citations
 - every citation exists in the context supplied to this case
 - an abstention has an empty answer and no citations
 - a non-abstention has non-empty answer text and at least one citation
@@ -412,6 +418,7 @@ results/generation/qasper-v1/predictions/qwen3-4b-smoke.jsonl
   "model_id": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
   "answerability": "answerable",
   "context_passage_ids": ["..."],
+  "prompt_version": "qasper-generation-v2",
   "prompt_hash": "...",
   "counted_input_tokens": 1234,
   "raw_response": "{...}",

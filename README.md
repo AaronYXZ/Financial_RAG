@@ -124,11 +124,14 @@ rag-generation run \
   --max-output-tokens 512
 ```
 
-The runner calls the server's OpenAI-compatible chat endpoint sequentially,
+Prompt contract `qasper-generation-v2` declares exact JSON field types, requires
+numeric confidence, repeats the contract after long contexts, and limits answer
+length and citation count. The runner calls the server's OpenAI-compatible chat
+endpoint sequentially,
 counts tokens with the original Qwen tokenizer, rejects prompts that exceed the
 shared context limit, validates the strict JSON response, and appends predictions
 to `results/generation/qasper-v1/predictions/qwen3-4b-track-b-v1.jsonl`. Repeating the
-command resumes from existing case, track, and model records. It also writes
+command resumes from existing case, track, model, and prompt-version records. It also writes
 `qwen3-4b-track-b-v1.eligibility.json`, which freezes the eligible case IDs used as
 the metric denominator. Use `--no-resume` to overwrite the output.
 

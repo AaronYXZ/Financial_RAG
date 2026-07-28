@@ -5,6 +5,7 @@ import pytest
 
 from rag_eval.generation_adapter import AdapterResult
 from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
+from rag_eval.generation_prompt import PROMPT_VERSION
 from rag_eval.generation_runner import eligibility_manifest_path, run_generation_cases
 
 
@@ -68,10 +69,13 @@ def test_runner_persists_valid_prediction_manifest_and_resumes(tmp_path: Path):
     rows = [json.loads(line) for line in output.read_text().splitlines()]
     assert len(rows) == 1
     assert rows[0]["parsed_response"]["answer"] == "Evidence"
+    assert rows[0]["prompt_version"] == PROMPT_VERSION
     manifest = json.loads(eligibility_manifest_path(output).read_text())
     assert manifest["eligible_case_count"] == 1
     assert manifest["eligible_case_ids"] == ["q1"]
     assert manifest["model_id"] == "fake-model"
+    assert manifest["schema_version"] == 2
+    assert manifest["prompt_version"] == PROMPT_VERSION
 
 
 def test_runner_excludes_case_over_shared_context_limit(tmp_path: Path):

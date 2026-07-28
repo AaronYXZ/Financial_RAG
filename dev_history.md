@@ -1,5 +1,40 @@
 # Development History
 
+## 2026-07-26. Stronger generation prompt contract v2
+
+### Motivation
+
+The first 25-case complete-paper run produced 14 invalid responses. Ten of those
+responses used a word-valued confidence such as `"high"` or omitted another
+required field while also using word-valued confidence. The original prompt named
+the four keys but did not communicate the validator's complete type constraints.
+
+### Implemented
+
+- Added `PROMPT_VERSION = "qasper-generation-v2"`.
+- Specified the exact four-key JSON structure and every required field type.
+- Required numeric confidence from `0.0` to `1.0`, never a qualitative string.
+- Required a JSON boolean for abstention and empty answer/citations when
+  abstaining.
+- Required exact copying of bracketed context passage IDs and prohibited
+  constructed citation IDs.
+- Limited answers to 120 words and citation lists to 5 IDs to reduce truncation
+  and over-citation.
+- Repeated the compact response contract after the question so it remains close
+  to the generation position following a long complete-paper context.
+- Added the prompt version to eligibility manifests, prediction rows, metric
+  summaries, and evaluation records.
+- Added prompt version to resume identity and prediction filtering so legacy and
+  v2 outputs cannot be silently mixed.
+- Added tests for the contract text, word-valued confidence, answer length,
+  citation count, artifact versioning, and evaluator filtering.
+
+### Required comparison
+
+Rerun the same 25 complete-paper cases under a separate v2 output file and compare
+valid-response rate, invalid-schema rate, invalid-citation rate, answer token F1,
+citation F1, latency, and output tokens against prompt v1.
+
 ## 2026-07-26. Basic abstention metrics, Stage 4
 
 ### Implemented

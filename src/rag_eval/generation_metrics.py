@@ -42,6 +42,7 @@ class EvaluationRecord:
             "split": self.case.split,
             "track": self.track,
             "model_id": self.model_id,
+            "prompt_version": prediction.get("prompt_version"),
             "answerability": self.case.answerability,
             "status": self.status,
             "prediction_present": self.prediction is not None,
@@ -98,6 +99,7 @@ def load_prediction_rows(
     *,
     track: str,
     model_id: str,
+    prompt_version: str | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     with path.open(encoding="utf-8") as handle:
@@ -106,6 +108,8 @@ def load_prediction_rows(
                 continue
             row = json.loads(line)
             if row.get("track") != track or row.get("model_id") != model_id:
+                continue
+            if prompt_version is not None and row.get("prompt_version") != prompt_version:
                 continue
             grouped[row["case_id"]].append(row)
     return dict(grouped)
@@ -365,7 +369,12 @@ def evaluate_prediction_files(
 ) -> dict[str, Any]:
     cases = load_generation_cases(cases_file)
     eligibility = load_eligibility_manifest(eligibility_file)
-    predictions = load_prediction_rows(predictions_file, track=track, model_id=model_id)
+    predictions = load_prediction_rows(
+        predictions_file,
+        track=track,
+        model_id=model_id,
+        prompt_version=eligibility.get("prompt_version"),
+    )
     records = build_evaluation_records(
         cases,
         predictions,
@@ -378,6 +387,7 @@ def evaluate_prediction_files(
         "schema_version": 1,
         "track": track,
         "model_id": model_id,
+        "prompt_version": eligibility.get("prompt_version"),
         "reliability_and_efficiency": reliability_and_efficiency(records),
         "answer_quality": aggregate_answer_quality(per_case),
         "citation_quality": aggregate_citation_quality(per_case),
