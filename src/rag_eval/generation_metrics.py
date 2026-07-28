@@ -1,4 +1,4 @@
-"""Stage 0-2 evaluation for fixed-context QASPER generation runs."""
+"""Stage 0-5 evaluation for fixed-context QASPER generation runs."""
 
 from __future__ import annotations
 
@@ -308,9 +308,14 @@ def score_answer_record(record: EvaluationRecord) -> dict[str, Any]:
     winning = max(reference_scores, key=lambda item: item["token_f1"])
     citation_score = score_citation_record(record)
     abstention_score = score_abstention_record(record)
+    confidence_score = score_confidence_record(
+        record,
+        answer_token_f1=float(winning["token_f1"]),
+    )
     return {
         **citation_score,
         **abstention_score,
+        **confidence_score,
         "case_id": record.case.case_id,
         "paper_id": record.case.paper_id,
         "track": record.track,
@@ -392,6 +397,10 @@ def evaluate_prediction_files(
         "answer_quality": aggregate_answer_quality(per_case),
         "citation_quality": aggregate_citation_quality(per_case),
         "abstention_quality": aggregate_abstention_quality(per_case, track=track),
+        "confidence_and_calibration": aggregate_confidence_and_calibration(
+            per_case,
+            track=track,
+        ),
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -697,4 +706,186 @@ def aggregate_abstention_quality(
             "abstain": ambiguous_outcomes["ambiguous_abstain"],
             "no_decision": ambiguous_outcomes["ambiguous_no_decision"],
         },
+    }
+
+
+def score_confidence_record(
+    record: EvaluationRecord,
+    *,
+    answer_token_f1: float,
+) -> dict[str, Any]:
+    """Create the Track B quality target paired with declared confidence."""
+
+    result: dict[str, Any] = {
+        "confidence_primary_eligible": False,
+        "confidence_evaluable": False,
+        "declared_confidence": None,
+        "calibration_quality_score": None,
+    }
+    if record.track != "complete-paper" or record.case.answerability == "ambiguous":
+        return result
+
+    result["confidence_primary_eligible"] = True
+    response = (record.prediction or {}).get("parsed_response")
+    if record.status != "valid" or not isinstance(response, Mapping):
+        return result
+
+    confidence = response.get("confidence")
+    if (
+        not isinstance(confidence, (int, float))
+        or isinstance(confidence, bool)
+        or not 0.0 <= float(confidence) <= 1.0
+    ):
+        return result
+
+    predicted_abstain = bool(response["abstain"])
+    if record.case.answerability == "unanswerable":
+        quality = 1.0 if predicted_abstain else 0.0
+    else:
+        quality = 0.0 if predicted_abstain else answer_token_f1
+
+    result.update(
+        {
+            "confidence_evaluable": True,
+            "declared_confidence": float(confidence),
+            "calibration_quality_score": float(quality),
+        }
+    )
+    return result
+
+
+def _calibration_bins(
+    evaluable: Sequence[Mapping[str, Any]],
+    *,
+    bin_count: int,
+) -> tuple[list[dict[str, Any]], float | None]:
+    if bin_count <= 0:
+        raise ValueError("bin_count must be positive")
+
+    grouped: list[list[Mapping[str, Any]]] = [[] for _ in range(bin_count)]
+    for item in evaluable:
+        confidence = float(item["declared_confidence"])
+        index = min(int(confidence * bin_count), bin_count - 1)
+        grouped[index].append(item)
+
+    bins: list[dict[str, Any]] = []
+    weighted_gap = 0.0
+    for index, items in enumerate(grouped):
+        mean_confidence = (
+            sum(float(item["declared_confidence"]) for item in items) / len(items)
+            if items
+            else None
+        )
+        mean_quality = (
+            sum(float(item["calibration_quality_score"]) for item in items) / len(items)
+            if items
+            else None
+        )
+        absolute_gap = (
+            abs(mean_confidence - mean_quality)
+            if mean_confidence is not None and mean_quality is not None
+            else None
+        )
+        if absolute_gap is not None:
+            weighted_gap += absolute_gap * len(items)
+        bins.append(
+            {
+                "bin_index": index,
+                "lower_bound_inclusive": index / bin_count,
+                "upper_bound_inclusive": (index + 1) / bin_count
+                if index == bin_count - 1
+                else None,
+                "upper_bound_exclusive": (index + 1) / bin_count
+                if index < bin_count - 1
+                else None,
+                "count": len(items),
+                "mean_confidence": mean_confidence,
+                "mean_quality": mean_quality,
+                "absolute_gap": absolute_gap,
+            }
+        )
+
+    ece = weighted_gap / len(evaluable) if evaluable else None
+    return bins, ece
+
+
+def _risk_coverage_curve(
+    evaluable: Sequence[Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], float | None]:
+    if not evaluable:
+        return [], None
+
+    by_confidence: dict[float, list[Mapping[str, Any]]] = defaultdict(list)
+    for item in evaluable:
+        by_confidence[float(item["declared_confidence"])].append(item)
+
+    selected_count = 0
+    selected_quality = 0.0
+    previous_coverage = 0.0
+    aurc = 0.0
+    curve: list[dict[str, Any]] = []
+    denominator = len(evaluable)
+    for threshold in sorted(by_confidence, reverse=True):
+        group = by_confidence[threshold]
+        selected_count += len(group)
+        selected_quality += sum(
+            float(item["calibration_quality_score"]) for item in group
+        )
+        coverage = selected_count / denominator
+        mean_quality = selected_quality / selected_count
+        risk = 1.0 - mean_quality
+        aurc += risk * (coverage - previous_coverage)
+        previous_coverage = coverage
+        curve.append(
+            {
+                "confidence_threshold": threshold,
+                "selected_case_count": selected_count,
+                "coverage": coverage,
+                "mean_quality": mean_quality,
+                "risk": risk,
+            }
+        )
+    return curve, aurc
+
+
+def aggregate_confidence_and_calibration(
+    per_case: Sequence[Mapping[str, Any]],
+    *,
+    track: str,
+    bin_count: int = 10,
+) -> dict[str, Any]:
+    """Aggregate Track B ECE and confidence-threshold risk-coverage."""
+
+    if track != "complete-paper":
+        return {
+            "applicable": False,
+            "reason": "Confidence calibration requires the complete-paper track",
+            "case_count": len(per_case),
+        }
+
+    primary = [item for item in per_case if item["confidence_primary_eligible"]]
+    evaluable = [item for item in primary if item["confidence_evaluable"]]
+    bins, ece = _calibration_bins(evaluable, bin_count=bin_count)
+    curve, aurc = _risk_coverage_curve(evaluable)
+    primary_count = len(primary)
+    evaluable_count = len(evaluable)
+    return {
+        "applicable": True,
+        "case_count": len(per_case),
+        "primary_case_count": primary_count,
+        "ambiguous_case_count": sum(
+            item["answerability"] == "ambiguous" for item in per_case
+        ),
+        "confidence_evaluable_count": evaluable_count,
+        "confidence_unavailable_count": primary_count - evaluable_count,
+        "confidence_availability_rate": (
+            evaluable_count / primary_count if primary_count else None
+        ),
+        "quality_target": "abstention_correctness_or_answer_token_f1",
+        "binning_policy": f"{bin_count}_equal_width_validation_frozen",
+        "bin_count": bin_count,
+        "expected_calibration_error": ece,
+        "calibration_bins": bins,
+        "area_under_risk_coverage_curve": aurc,
+        "risk_coverage_curve": curve,
     }

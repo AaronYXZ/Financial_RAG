@@ -786,6 +786,30 @@ On unanimous Track B cases, report:
 - risk-coverage curve and area under the curve using declared confidence
 - expected calibration error with bins frozen on validation
 
+Use this frozen Stage 5 calibration policy:
+
+- restrict primary calibration to unanimous answerable and unanswerable Track B
+  cases
+- exclude ambiguous cases and report their count separately
+- require a valid response with numeric confidence in `[0.0, 1.0]` for confidence
+  evaluation
+- report confidence availability over all primary cases so invalid and missing
+  responses remain visible
+- assign quality `1.0` to correct abstentions and `0.0` to false answers
+- assign quality `0.0` to false abstentions
+- for answered, answerable cases, use the best-reference QASPER token F1 as the
+  continuous quality target
+- compute expected calibration error with 10 equal-width bins: `[0.0, 0.1)`,
+  through `[0.9, 1.0]`
+
+Build the risk-coverage curve by sorting unique declared-confidence thresholds
+from high to low. Include all cases tied at a threshold together. At each
+threshold, coverage is the selected count divided by all confidence-evaluable
+cases, and risk is `1 - mean(calibration_quality_score)`. Area under the curve is
+the discrete sum of risk times each increase in coverage.
+
+Grouping ties makes the result invariant to prediction row order.
+
 Report class counts with every aggregate. Ambiguous cases are excluded from the
 primary binary metrics and reported separately.
 
@@ -995,7 +1019,7 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
 - [x] Implement failure-rate, retry, latency, token, and local-cost metrics.
 - [x] Implement citation precision, recall, F1, validity, and coverage metrics.
 - [x] Implement basic Track B abstention and answerability metrics.
-- [ ] Implement risk-coverage and calibration metrics.
+- [x] Implement risk-coverage and calibration metrics.
 - [ ] Implement paper-clustered bootstrap confidence intervals.
 - [ ] Add the blinded claim-support and completeness evaluator.
 - [ ] Complete the stratified human-audit workflow.

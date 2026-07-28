@@ -4,8 +4,8 @@ This document traces the current `rag-generation run` implementation from the
 shell command through QASPER case loading, prompt construction, local Qwen
 inference, validation, persistence, and process exit.
 
-It describes the runner and the implemented Stage 0 to 4 deterministic metric
-layers. Calibration, judge, and bootstrap layers remain future work.
+It describes the runner and the implemented Stage 0 to 5 deterministic metric
+layers. Judge and bootstrap layers remain future work.
 
 ## 1. Processes and prerequisites
 
@@ -517,10 +517,10 @@ The console-script wrapper consumes that integer as the process exit status.
 | Prompt rendering, hash, and validation | [`src/rag_eval/generation_prompt.py`](src/rag_eval/generation_prompt.py) |
 | Local HTTP and tokenizer adapter | [`src/rag_eval/generation_adapter.py`](src/rag_eval/generation_adapter.py) |
 | Case loop, eligibility, persistence, resume | [`src/rag_eval/generation_runner.py`](src/rag_eval/generation_runner.py) |
-| Stage 0 to 4 metrics | [`src/rag_eval/generation_metrics.py`](src/rag_eval/generation_metrics.py) |
+| Stage 0 to 5 metrics | [`src/rag_eval/generation_metrics.py`](src/rag_eval/generation_metrics.py) |
 | Smoke-test command | [`README.md`](README.md) |
 
-## 16. Stage 0 to 4 metric execution
+## 16. Stage 0 to 5 metric execution
 
 Run metrics only after `rag-generation run` has created both the prediction JSONL
 and its eligibility sidecar:
@@ -544,10 +544,12 @@ flowchart LR
     Quality --> Aggregate["aggregate_answer_quality()"]
     Quality --> Citations["aggregate_citation_quality()"]
     Quality --> Abstention["aggregate_abstention_quality()"]
+    Quality --> Confidence["aggregate_confidence_and_calibration()"]
     Reliability --> Summary["summary.json"]
     Aggregate --> Summary
     Citations --> Summary
     Abstention --> Summary
+    Confidence --> Summary
     Join --> Records["evaluation_records.jsonl"]
     Quality --> PerCase["per_case_metrics.jsonl"]
 ```
@@ -572,7 +574,11 @@ The evaluator takes these steps:
 9. On complete-paper runs, compare the unanimous answerability label with the
    declared abstention, report invalid outputs as no decisions, and keep ambiguous
    cases outside primary binary metrics.
-10. Write evaluation records, per-case scores, and the aggregate summary.
+10. On complete-paper runs, pair declared confidence with correct abstention,
+    false-decision quality, or continuous answer token F1. Report confidence
+    availability, ten-bin expected calibration error, and a tie-grouped
+    risk-coverage curve with its discrete area.
+11. Write evaluation records, per-case scores, and the aggregate summary.
 
 Invalid and missing predictions receive zero answer quality. They remain in the
 eligible-case denominator, which prevents failed calls from inflating the score.

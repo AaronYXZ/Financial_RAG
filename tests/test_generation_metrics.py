@@ -10,6 +10,7 @@ from rag_eval.generation_metrics import (
     aggregate_abstention_quality,
     aggregate_answer_quality,
     aggregate_citation_quality,
+    aggregate_confidence_and_calibration,
     build_evaluation_records,
     citation_precision_recall_f1,
     evaluate_prediction_files,
@@ -227,7 +228,7 @@ def test_abstention_maps_to_official_unanswerable_label():
     assert score["answer_normalized_exact_match"] == 1.0
 
 
-def test_evaluator_writes_stage_zero_to_four_artifacts(tmp_path: Path):
+def test_evaluator_writes_stage_zero_to_five_artifacts(tmp_path: Path):
     case = make_case("q1", (make_reference("a1"),))
     cases_file = tmp_path / "cases.jsonl"
     cases_file.write_text(json.dumps(case.to_dict()) + "\n", encoding="utf-8")
@@ -262,6 +263,7 @@ def test_evaluator_writes_stage_zero_to_four_artifacts(tmp_path: Path):
     assert summary["answer_quality"]["token_f1"] == 1.0
     assert summary["citation_quality"]["citation_f1"] == 1.0
     assert summary["abstention_quality"]["applicable"] is False
+    assert summary["confidence_and_calibration"]["applicable"] is False
     assert (output_dir / "evaluation_records.jsonl").is_file()
     assert (output_dir / "per_case_metrics.jsonl").is_file()
     assert json.loads((output_dir / "summary.json").read_text()) == summary
@@ -503,3 +505,140 @@ def test_abstention_metrics_are_not_applicable_to_oracle_evidence_track():
         "reason": "Abstention metrics require the complete-paper track",
         "case_count": 1,
     }
+
+
+def test_track_b_calibration_uses_continuous_quality_and_reports_availability():
+    def scored(
+        case_id: str,
+        answerability: str,
+        *,
+        answer: str,
+        abstain: bool,
+        confidence: float,
+    ):
+        case = make_case(
+            case_id,
+            (
+                make_reference(
+                    f"{case_id}-annotation",
+                    text="" if answerability == "unanswerable" else "correct answer",
+                    unanswerable=answerability == "unanswerable",
+                ),
+            ),
+            answerability=answerability,
+        )
+        row = prediction(
+            case_id,
+            parsed_response={
+                "answer": answer,
+                "abstain": abstain,
+                "citations": [] if abstain else [PASSAGE.passage_id],
+                "confidence": confidence,
+            },
+        )
+        return score_answer_record(
+            EvaluationRecord(
+                case,
+                "complete-paper",
+                "test-model",
+                "valid",
+                row,
+                0,
+            )
+        )
+
+    answerable = scored(
+        "answerable",
+        "answerable",
+        answer="correct answer",
+        abstain=False,
+        confidence=0.9,
+    )
+    false_answer = scored(
+        "unanswerable",
+        "unanswerable",
+        answer="unsupported",
+        abstain=False,
+        confidence=0.2,
+    )
+    ambiguous = scored(
+        "ambiguous",
+        "ambiguous",
+        answer="possible answer",
+        abstain=False,
+        confidence=0.7,
+    )
+    no_decision_case = make_case(
+        "no-decision",
+        (make_reference("no-decision-annotation", text="correct answer"),),
+    )
+    no_decision = score_answer_record(
+        EvaluationRecord(
+            no_decision_case,
+            "complete-paper",
+            "test-model",
+            "invalid_schema",
+            prediction(
+                "no-decision",
+                parsed_response=None,
+                error="Generation response keys are invalid",
+                error_stage="response_validation",
+            ),
+            0,
+        )
+    )
+
+    summary = aggregate_confidence_and_calibration(
+        [answerable, false_answer, ambiguous, no_decision],
+        track="complete-paper",
+    )
+
+    assert answerable["calibration_quality_score"] == 1.0
+    assert false_answer["calibration_quality_score"] == 0.0
+    assert ambiguous["confidence_primary_eligible"] is False
+    assert no_decision["confidence_evaluable"] is False
+    assert summary["primary_case_count"] == 3
+    assert summary["ambiguous_case_count"] == 1
+    assert summary["confidence_evaluable_count"] == 2
+    assert summary["confidence_unavailable_count"] == 1
+    assert summary["confidence_availability_rate"] == pytest.approx(2 / 3)
+    assert summary["expected_calibration_error"] == pytest.approx(0.15)
+    assert summary["area_under_risk_coverage_curve"] == pytest.approx(0.25)
+    assert summary["risk_coverage_curve"] == [
+        {
+            "confidence_threshold": 0.9,
+            "selected_case_count": 1,
+            "coverage": 0.5,
+            "mean_quality": 1.0,
+            "risk": 0.0,
+        },
+        {
+            "confidence_threshold": 0.2,
+            "selected_case_count": 2,
+            "coverage": 1.0,
+            "mean_quality": 0.5,
+            "risk": 0.5,
+        },
+    ]
+
+
+def test_risk_coverage_groups_confidence_ties():
+    per_case = [
+        {
+            "confidence_primary_eligible": True,
+            "confidence_evaluable": True,
+            "declared_confidence": 0.8,
+            "calibration_quality_score": quality,
+            "answerability": "answerable",
+        }
+        for quality in (1.0, 0.0)
+    ]
+
+    summary = aggregate_confidence_and_calibration(
+        per_case,
+        track="complete-paper",
+    )
+
+    assert len(summary["risk_coverage_curve"]) == 1
+    assert summary["risk_coverage_curve"][0]["coverage"] == 1.0
+    assert summary["area_under_risk_coverage_curve"] == 0.5

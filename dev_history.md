@@ -1,5 +1,33 @@
 # Development History
 
+## 2026-07-27. Confidence calibration and risk-coverage, Stage 5
+
+### Implemented
+
+- Added Track B per-case declared confidence and calibration quality fields.
+- Restricted primary calibration to unanimous answerable and unanswerable cases.
+  Ambiguous cases remain excluded and explicitly counted.
+- Defined a continuous quality target. Correct abstentions score `1.0`, false
+  answers and false abstentions score `0.0`, and answered answerable cases use
+  best-reference QASPER token F1.
+- Added confidence evaluable, unavailable, and availability-rate reporting so
+  invalid and missing predictions are not silently removed.
+- Added expected calibration error with 10 fixed equal-width validation bins.
+- Added a confidence-threshold risk-coverage curve and discrete area under the
+  curve.
+- Grouped equal-confidence cases at the same threshold, preventing row order from
+  changing the curve or area.
+- Marked confidence calibration as not applicable to oracle-evidence Track A.
+- Added synthetic tests for quality-target construction, invalid-output
+  availability, ECE, risk-coverage area, and tied confidence values.
+
+### Frozen policy
+
+Stage 5 bins and quality semantics are frozen in `benchmark_spec.md` before
+running reportable comparisons. Confidence calibration applies to valid Track B
+responses. Confidence availability is reported over every unanimous Track B
+case.
+
 ## 2026-07-26. Stronger generation prompt contract v2
 
 ### Motivation

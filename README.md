@@ -135,7 +135,7 @@ command resumes from existing case, track, model, and prompt-version records. It
 `qwen3-4b-track-b-v1.eligibility.json`, which freezes the eligible case IDs used as
 the metric denominator. Use `--no-resume` to overwrite the output.
 
-After the generation run, calculate Stage 0 to 4 metrics:
+After the generation run, calculate Stage 0 to 5 metrics:
 
 ```bash
 rag-generation metrics
@@ -156,8 +156,9 @@ inference cost, official QASPER token F1, normalized exact match, citation
 precision, citation recall, citation F1, citation validity, and citation coverage.
 Missing and invalid predictions remain visible in the denominator. Complete-paper
 runs also report answerability accuracy, abstention precision, recall, F1, false
-answers, false abstentions, no decisions, and a confusion matrix. Calibration,
-bootstrap, and rubric metrics remain future stages.
+answers, false abstentions, no decisions, a confusion matrix, confidence
+availability, expected calibration error, a risk-coverage curve, and its area.
+Paper-clustered bootstrap and rubric metrics remain future stages.
 
 ## Evaluation design
 
