@@ -99,6 +99,21 @@ creates one case per QASPER question, preserves all reference annotations, maps
 annotated evidence to stable passage IDs, and writes a checksummed manifest.
 Downloaded data and normalized cases remain under the ignored `data/` directory.
 
+To use the OpenAI API provider, install its optional dependencies:
+
+```bash
+pip install -e ".[generation,openai]"
+cp .env.example .env
+```
+
+Set the key only in the ignored `.env` file:
+
+```dotenv
+OPENAI_API_KEY=your-api-key
+```
+
+Do not add the key to commands, source files, logs, or committed configuration.
+
 The generation experiment runner has three diagnostic tracks:
 
 - `oracle-evidence` is the primary controlled generator benchmark.
@@ -117,6 +132,36 @@ mlx_lm.server --model mlx-community/Qwen3-4B-Instruct-2507-4bit
 
 The server listens on `http://127.0.0.1:8080` by default. It is intended only as
 a local benchmark endpoint.
+
+The same generation commands accept `--provider openai`. The OpenAI provider uses
+the Responses API, structured JSON output, `store=false`, and the API key loaded
+from `.env`. For an oracle-evidence run:
+
+```bash
+rag-generation generate-oracle \
+  --provider openai \
+  --openai-model gpt-5 \
+  --env-file .env \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --output-file results/generation/qasper-v1/predictions/gpt-5-oracle-v1.jsonl \
+  --max-cases 25
+```
+
+`gpt-5` is the default OpenAI model. The allowed model IDs are:
+
+- `gpt-5`
+- `gpt-5.6-sol`
+- `gpt-5.6-luna`
+
+Evaluate that run with:
+
+```bash
+rag-generation metrics \
+  --track oracle-evidence \
+  --model gpt-5 \
+  --predictions-file results/generation/qasper-v1/predictions/gpt-5-oracle-v1.jsonl \
+  --output-dir results/generation/qasper-v1/metrics/gpt-5-oracle-v1
+```
 
 ### Three generation tasks
 

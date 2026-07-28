@@ -25,6 +25,11 @@ generation = [
     "datasets>=3.0,<5",
     "transformers>=4.51,<6",
 ]
+openai = [
+    "openai>=2.0,<3",
+    "python-dotenv>=1.0,<2",
+    "tiktoken>=0.9,<1",
+]
 dev = [
     "pytest>=8.0",
 ]

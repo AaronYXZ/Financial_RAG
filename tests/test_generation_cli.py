@@ -1,6 +1,8 @@
 from argparse import Namespace
 from pathlib import Path
 
+import pytest
+
 import rag_eval.generation_cli as generation_cli
 from rag_eval.generation_cli import build_parser
 
@@ -9,12 +11,73 @@ def test_generation_run_defaults_to_local_qwen_smoke_test():
     args = build_parser().parse_args(["run"])
 
     assert args.track == "oracle-evidence"
+    assert args.provider == "local"
     assert args.model == "mlx-community/Qwen3-4B-Instruct-2507-4bit"
     assert args.max_context_tokens == 32_768
     assert args.max_output_tokens == 512
     assert args.max_cases == 25
     assert args.retries == 1
     assert args.resume is True
+
+
+def test_generation_commands_accept_openai_provider_configuration():
+    args = build_parser().parse_args(
+        [
+            "generate-oracle",
+            "--provider",
+            "openai",
+            "--openai-model",
+            "gpt-5.6-sol",
+            "--env-file",
+            "secrets.env",
+            "--openai-reasoning-effort",
+            "low",
+        ]
+    )
+
+    assert args.provider == "openai"
+    assert args.openai_model == "gpt-5.6-sol"
+    assert args.env_file == "secrets.env"
+    assert args.openai_api_key_env == "OPENAI_API_KEY"
+    assert args.openai_reasoning_effort == "low"
+
+
+def test_openai_model_defaults_and_choices_are_explicit():
+    parser = build_parser()
+    default_args = parser.parse_args(["generate-oracle", "--provider", "openai"])
+    luna_args = parser.parse_args(
+        [
+            "generate-oracle",
+            "--provider",
+            "openai",
+            "--openai-model",
+            "gpt-5.6-luna",
+        ]
+    )
+
+    assert default_args.openai_model == "gpt-5"
+    assert default_args.openai_reasoning_effort == "low"
+    assert luna_args.openai_model == "gpt-5.6-luna"
+
+
+def test_openai_reasoning_effort_is_validated_for_selected_model(tmp_path: Path):
+    args = build_parser().parse_args(
+        [
+            "generate-oracle",
+            "--provider",
+            "openai",
+            "--openai-model",
+            "gpt-5",
+            "--openai-reasoning-effort",
+            "none",
+            "--cases-file",
+            str(tmp_path / "cases.jsonl"),
+        ]
+    )
+    (tmp_path / "cases.jsonl").write_text("")
+
+    with pytest.raises(ValueError, match="gpt-5 supports reasoning efforts"):
+        generation_cli._generate_oracle(args)
 
 
 def test_generation_metrics_defaults_to_smoke_test_artifacts():

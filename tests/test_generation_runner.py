@@ -27,6 +27,11 @@ class FakeAdapter:
         )
 
 
+class FakeOpenAIAdapter(FakeAdapter):
+    provider = "openai"
+    model_id = "gpt-test"
+
+
 PASSAGE = PaperPassage(
     "paper::paragraph::0001", "paper", "paragraph", "Results", "Evidence", 0
 )
@@ -145,3 +150,20 @@ def test_runner_requires_frozen_context_identity(tmp_path: Path):
             track="retrieved-context",
             output_file=tmp_path / "retrieved.jsonl",
         )
+
+
+def test_runner_records_openai_provider_without_changing_run_identity(tmp_path: Path):
+    output = tmp_path / "openai.jsonl"
+    run_generation_cases(
+        [CASE],
+        adapter=FakeOpenAIAdapter(),
+        track="oracle-evidence",
+        output_file=output,
+    )
+
+    row = json.loads(output.read_text())
+    manifest = json.loads(eligibility_manifest_path(output).read_text())
+    assert row["provider"] == "openai"
+    assert row["model_id"] == "gpt-test"
+    assert manifest["provider"] == "openai"
+    assert manifest["model_id"] == "gpt-test"

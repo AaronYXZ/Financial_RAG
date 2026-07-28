@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Sequence
 
-from .generation_adapter import OpenAICompatibleAdapter
+from .generation_adapter import OpenAICompatibleAdapter, OpenAIResponsesAdapter
 from .generation_comparison import compare_response_validity, write_comparison
 from .generation_metrics import evaluate_prediction_files, load_eligibility_manifest
 from .generation_runner import eligibility_manifest_path, run_generation_cases
@@ -29,6 +29,15 @@ from .generation_data import (
     load_qasper_cases,
     qasper_parquet_url,
 )
+
+LOCAL_MODEL_ID = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
+OPENAI_MODEL_ID = "gpt-5"
+OPENAI_MODEL_IDS = ("gpt-5", "gpt-5.6-sol", "gpt-5.6-luna")
+OPENAI_REASONING_EFFORTS = {
+    "gpt-5": ("minimal", "low", "medium", "high"),
+    "gpt-5.6-sol": ("none", "low", "medium", "high", "xhigh", "max"),
+    "gpt-5.6-luna": ("none", "low", "medium", "high", "xhigh", "max"),
+}
 
 
 def _sha256(path: Path) -> str:
@@ -96,15 +105,32 @@ def _execute_generation(
 ) -> int:
     cases_path = Path(args.cases_file)
     cases = _load_cases(cases_path)
-    adapter = OpenAICompatibleAdapter(
-        base_url=args.base_url,
-        model_id=args.model,
-        tokenizer_id=args.tokenizer,
-        max_output_tokens=args.max_output_tokens,
-        temperature=args.temperature,
-        timeout_seconds=args.timeout,
-        runtime_retries=args.retries,
-    )
+    if args.provider == "openai":
+        allowed_efforts = OPENAI_REASONING_EFFORTS[args.openai_model]
+        if args.openai_reasoning_effort not in allowed_efforts:
+            raise ValueError(
+                f"{args.openai_model} supports reasoning efforts {allowed_efforts}, "
+                f"not {args.openai_reasoning_effort!r}"
+            )
+        adapter = OpenAIResponsesAdapter(
+            model_id=args.openai_model,
+            env_file=Path(args.env_file),
+            api_key_env=args.openai_api_key_env,
+            max_output_tokens=args.max_output_tokens,
+            reasoning_effort=args.openai_reasoning_effort,
+            timeout_seconds=args.timeout,
+            runtime_retries=args.retries,
+        )
+    else:
+        adapter = OpenAICompatibleAdapter(
+            base_url=args.base_url,
+            model_id=args.model,
+            tokenizer_id=args.tokenizer,
+            max_output_tokens=args.max_output_tokens,
+            temperature=args.temperature,
+            timeout_seconds=args.timeout,
+            runtime_retries=args.retries,
+        )
     retrieved_contexts = None
     context_manifest_sha256 = None
     if track == "retrieved-context":
@@ -266,10 +292,12 @@ def _add_generation_arguments(
         default="data/generation/qasper-v1/validation.cases.jsonl",
     )
     command.add_argument("--output-file", default=default_output_file)
+    _add_provider_arguments(command)
     command.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
     command.add_argument(
         "--model",
-        default="mlx-community/Qwen3-4B-Instruct-2507-4bit",
+        default=LOCAL_MODEL_ID,
+        help="Model ID exposed by the local OpenAI-compatible server.",
     )
     command.add_argument("--tokenizer", default="Qwen/Qwen3-4B-Instruct-2507")
     command.add_argument("--max-context-tokens", type=int, default=32_768)
@@ -286,6 +314,35 @@ def _add_generation_arguments(
         help="Overwrite the prediction file instead of resuming it",
     )
     command.set_defaults(resume=True)
+
+
+def _add_provider_arguments(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
+        "--provider",
+        choices=("local", "openai"),
+        default="local",
+    )
+    command.add_argument(
+        "--openai-model",
+        choices=OPENAI_MODEL_IDS,
+        default=OPENAI_MODEL_ID,
+        help="OpenAI model used when --provider openai is selected.",
+    )
+    command.add_argument(
+        "--env-file",
+        default=".env",
+        help="Environment file containing the OpenAI API key.",
+    )
+    command.add_argument(
+        "--openai-api-key-env",
+        default="OPENAI_API_KEY",
+        help="Environment variable that contains the OpenAI API key.",
+    )
+    command.add_argument(
+        "--openai-reasoning-effort",
+        choices=("none", "minimal", "low", "medium", "high", "xhigh", "max"),
+        default="low",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -305,6 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--cases-file", default="data/generation/qasper-v1/validation.cases.jsonl")
     tracks = ("oracle-evidence", "complete-paper", "retrieved-context")
     run.add_argument("--track", choices=tracks, default="oracle-evidence")
+    _add_provider_arguments(run)
     run.add_argument(
         "--output-file",
         default="results/generation/qasper-v1/predictions/qwen3-4b-track-a-v2.jsonl",
@@ -316,7 +374,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--base-url", default="http://127.0.0.1:8080/v1")
     run.add_argument(
         "--model",
-        default="mlx-community/Qwen3-4B-Instruct-2507-4bit",
+        default=LOCAL_MODEL_ID,
+        help="Model ID exposed by the local OpenAI-compatible server.",
     )
     run.add_argument("--tokenizer", default="Qwen/Qwen3-4B-Instruct-2507")
     run.add_argument("--max-context-tokens", type=int, default=32_768)

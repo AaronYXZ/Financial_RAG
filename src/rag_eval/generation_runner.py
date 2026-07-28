@@ -131,6 +131,8 @@ def _write_eligibility_manifest(
         "eligible_case_ids": [item.case.case_id for item in eligible],
         "excluded_counts": exclusions,
     }
+    if getattr(adapter, "provider", None) == "openai":
+        payload["provider"] = "openai"
     if context_manifest_sha256 is not None:
         payload["context_manifest_sha256"] = context_manifest_sha256
     if path.exists() and not overwrite:
@@ -226,6 +228,9 @@ def run_generation_cases(
                 "prompt_hash": prompt_hash(SYSTEM_PROMPT, item.user_prompt),
                 "counted_input_tokens": item.input_tokens,
             }
+            provider = getattr(adapter, "provider", None)
+            if provider is not None:
+                row["provider"] = provider
             if context_manifest_sha256 is not None:
                 row["context_manifest_sha256"] = context_manifest_sha256
             error_stage = "generation"

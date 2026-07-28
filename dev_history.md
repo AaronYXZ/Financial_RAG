@@ -1,5 +1,20 @@
 # Development History
 
+## 2026-07-27. OpenAI Responses API generation provider
+
+### Implemented
+
+- Added a separate OpenAI Responses API adapter while retaining the local
+  OpenAI-compatible MLX adapter.
+- Added structured JSON output, explicit reasoning effort, disabled response
+  storage, retry accounting, usage extraction, and model-aware token counting.
+- Added `--provider openai`, OpenAI model, reasoning, API-key variable, and
+  environment-file options to generation commands.
+- Set `gpt-5` as the default and constrained the CLI to `gpt-5`,
+  `gpt-5.6-sol`, and `gpt-5.6-luna`.
+- Added `.env` protection, a safe `.env.example`, optional dependencies, tests,
+  and example generation and metric commands.
+
 ## 2026-07-27. Task-oriented generation CLI
 
 ### Implemented
