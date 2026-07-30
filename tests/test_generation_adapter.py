@@ -1,4 +1,3 @@
-import io
 import json
 import urllib.error
 from types import SimpleNamespace
@@ -23,6 +22,7 @@ class FakeResponse:
     def read(self):
         return json.dumps(
             {
+                "model": "qwen/qwen3.7-plus",
                 "choices": [{"message": {"content": "{}"}}],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 2},
             }
@@ -170,6 +170,10 @@ def make_openrouter_adapter() -> OpenRouterChatAdapter:
     adapter.api_key = "test-key"
     adapter.http_referer = "https://example.com"
     adapter.app_title = "Local RAG Test"
+    adapter.fallback_model_ids = (
+        "qwen/qwen3.7-plus",
+        "deepseek/deepseek-v4-flash",
+    )
     adapter.max_output_tokens = 512
     adapter.temperature = 0.0
     adapter.timeout_seconds = 300.0
@@ -206,16 +210,18 @@ def test_openrouter_adapter_sends_selected_model_and_strict_schema(monkeypatch):
     assert headers["http-referer"] == "https://example.com"
     assert headers["x-openrouter-title"] == "Local RAG Test"
     assert payload["model"] == "anthropic/claude-sonnet-4.5"
+    assert payload["models"] == [
+        "qwen/qwen3.7-plus",
+        "deepseek/deepseek-v4-flash",
+    ]
     assert payload["max_tokens"] == 512
+    assert "temperature" not in payload
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
-    response_schema = payload["response_format"]["json_schema"]["schema"]
-    assert "maximum" not in response_schema["properties"]["confidence"]
-    assert "minimum" not in response_schema["properties"]["confidence"]
-    assert "maxItems" not in response_schema["properties"]["citations"]
     assert payload["provider"]["require_parameters"] is True
     assert result.input_tokens == 10
     assert result.output_tokens == 2
+    assert result.resolved_model_id == "qwen/qwen3.7-plus"
 
 
 def test_openrouter_adapter_retries_transient_transport_errors(monkeypatch):
@@ -232,36 +238,3 @@ def test_openrouter_adapter_retries_transient_transport_errors(monkeypatch):
     result = make_openrouter_adapter().generate("system", "user")
 
     assert result.attempts == 2
-
-
-def test_openrouter_adapter_exposes_safe_provider_error_details():
-    payload = {
-        "error": {
-            "message": "Provider returned error",
-            "metadata": {
-                "error_type": "invalid_request",
-                "provider_code": "invalid_request_error",
-                "provider_name": "Anthropic",
-                "raw": json.dumps(
-                    {
-                        "error": {
-                            "message": "temperature: Extra inputs are not permitted"
-                        }
-                    }
-                ),
-            },
-        }
-    }
-    error = urllib.error.HTTPError(
-        "https://openrouter.ai/api/v1/chat/completions",
-        400,
-        "Bad Request",
-        {},
-        io.BytesIO(json.dumps(payload).encode()),
-    )
-
-    detail = OpenRouterChatAdapter._error_detail(error)
-
-    assert "error_type=invalid_request" in detail
-    assert "provider_name=Anthropic" in detail
-    assert "provider_message=temperature: Extra inputs are not permitted" in detail

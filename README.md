@@ -134,27 +134,32 @@ OPENROUTER_API_KEY=your-openrouter-api-key
 OpenRouter accepts a free-form model slug through `--openrouter-model`. The
 benchmark requests strict JSON-schema output and requires OpenRouter to select an
 endpoint that supports it. This preserves the response contract when models are
-changed. For example:
+changed. By default, Luna Pro falls back to Qwen3.7 Plus and then DeepSeek V4
+Flash:
 
 ```bash
 rag-generation generate-retrieved \
   --provider openrouter \
-  --openrouter-model anthropic/claude-sonnet-4.5 \
+  --openrouter-model openai/gpt-5.6-luna-pro \
+  --openrouter-fallback-model qwen/qwen3.7-plus \
+  --openrouter-fallback-model deepseek/deepseek-v4-flash \
   --env-file .env \
   --cases-file data/generation/qasper-v1/validation.cases.jsonl \
   --context-manifest data/generation/qasper-v1/retrieval/hybrid-minilm-paper-top5-validation-v1.json \
-  --output-file results/generation/qasper-v1/predictions/claude-sonnet-4.5-openrouter.jsonl \
+  --output-file results/generation/qasper-v1/predictions/gpt-5.6-luna-pro-openrouter.jsonl \
   --max-cases 25
 ```
+
+The two fallback flags above are shown for clarity and are already the defaults.
+Use `--no-openrouter-fallbacks` to run only the primary model. OpenRouter records
+the model that ultimately served the response, and the runner writes it as
+`resolved_model_id` alongside the configured fallback chain.
 
 The optional `--openrouter-http-referer` and `--openrouter-app-title` flags set
 OpenRouter attribution headers. The app title defaults to `Project Local RAG`.
 OpenRouter token counting before a request uses a stable `o200k_base` estimate
 because model slugs can span tokenizer families. Each completed result records
 the authoritative prompt and completion token counts returned by OpenRouter.
-The provider-facing schema omits constraints unsupported by some vendors. The
-runner still validates the complete frozen response contract locally, including
-the confidence range, citation count, citation IDs, and answer length.
 
 The generation experiment runner has three diagnostic tracks:
 

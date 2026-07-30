@@ -47,7 +47,11 @@ from .generation_data import (
 
 LOCAL_MODEL_ID = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
 OPENAI_MODEL_ID = "gpt-5"
-OPENROUTER_MODEL_ID = "openai/gpt-5"
+OPENROUTER_MODEL_ID = "openai/gpt-5.6-luna-pro"
+OPENROUTER_FALLBACK_MODEL_IDS = (
+    "qwen/qwen3.7-plus",
+    "deepseek/deepseek-v4-flash",
+)
 OPENAI_MODEL_IDS = ("gpt-5", "gpt-5.6-sol", "gpt-5.6-luna")
 OPENAI_REASONING_EFFORTS = {
     "gpt-5": ("minimal", "low", "medium", "high"),
@@ -117,6 +121,13 @@ def _load_cases(cases_path: Path):
         return [generation_case_from_dict(json.loads(line)) for line in handle]
 
 
+def _openrouter_fallback_models(args: argparse.Namespace) -> tuple[str, ...]:
+    configured = args.openrouter_fallback_model
+    if configured is None:
+        return OPENROUTER_FALLBACK_MODEL_IDS
+    return tuple(configured)
+
+
 def _execute_generation(
     args: argparse.Namespace,
     *,
@@ -149,6 +160,7 @@ def _execute_generation(
             base_url=args.openrouter_base_url,
             http_referer=args.openrouter_http_referer,
             app_title=args.openrouter_app_title,
+            fallback_model_ids=_openrouter_fallback_models(args),
             max_output_tokens=args.max_output_tokens,
             temperature=args.temperature,
             timeout_seconds=args.timeout,
@@ -509,6 +521,22 @@ def _add_provider_arguments(command: argparse.ArgumentParser) -> None:
         "--openrouter-app-title",
         default="Project Local RAG",
         help="Optional app name sent in OpenRouter's X-OpenRouter-Title header.",
+    )
+    command.add_argument(
+        "--openrouter-fallback-model",
+        action="append",
+        default=None,
+        help=(
+            "Fallback model slug, tried in order after the primary. Repeat to add "
+            "models. Defaults to Qwen3.7 Plus, then DeepSeek V4 Flash."
+        ),
+    )
+    command.add_argument(
+        "--no-openrouter-fallbacks",
+        action="store_const",
+        const=[],
+        dest="openrouter_fallback_model",
+        help="Disable the default OpenRouter model fallback chain.",
     )
 
 

@@ -142,6 +142,9 @@ def _write_eligibility_manifest(
     provider = getattr(adapter, "provider", None)
     if provider is not None:
         payload["provider"] = provider
+    fallback_model_ids = getattr(adapter, "fallback_model_ids", ())
+    if fallback_model_ids:
+        payload["fallback_model_ids"] = list(fallback_model_ids)
     if context_manifest_sha256 is not None:
         payload["context_manifest_sha256"] = context_manifest_sha256
     if path.exists() and not overwrite:
@@ -242,6 +245,9 @@ def run_generation_cases(
             provider = getattr(adapter, "provider", None)
             if provider is not None:
                 row["provider"] = provider
+            fallback_model_ids = getattr(adapter, "fallback_model_ids", ())
+            if fallback_model_ids:
+                row["fallback_model_ids"] = list(fallback_model_ids)
             if context_manifest_sha256 is not None:
                 row["context_manifest_sha256"] = context_manifest_sha256
             error_stage = "generation"
@@ -256,6 +262,8 @@ def run_generation_cases(
                         "attempts": result.attempts,
                     }
                 )
+                if result.resolved_model_id is not None:
+                    row["resolved_model_id"] = result.resolved_model_id
                 error_stage = "response_validation"
                 parsed = parse_generation_response(
                     result.text,

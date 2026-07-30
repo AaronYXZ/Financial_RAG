@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping, Protocol, Sequence
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class AdapterResult:
     input_tokens: int | None
     output_tokens: int | None
     attempts: int = 1
+    resolved_model_id: str | None = None
 
 
 class GenerationRequestError(RuntimeError):
@@ -50,24 +51,6 @@ GENERATION_RESPONSE_SCHEMA = {
             "minimum": 0.0,
             "maximum": 1.0,
         },
-    },
-    "required": ["answer", "abstain", "citations", "confidence"],
-    "additionalProperties": False,
-}
-
-# Anthropic structured outputs reject validation constraints such as minimum,
-# maximum, and maxLength. Keep the provider-facing schema portable, then enforce
-# the complete frozen response contract in parse_generation_response.
-OPENROUTER_GENERATION_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "answer": {"type": "string"},
-        "abstain": {"type": "boolean"},
-        "citations": {
-            "type": "array",
-            "items": {"type": "string"},
-        },
-        "confidence": {"type": "number"},
     },
     "required": ["answer", "abstain", "citations", "confidence"],
     "additionalProperties": False,
@@ -312,6 +295,7 @@ class OpenRouterChatAdapter:
         base_url: str = "https://openrouter.ai/api/v1",
         http_referer: str | None = None,
         app_title: str | None = None,
+        fallback_model_ids: Sequence[str] = (),
         max_output_tokens: int = 1024,
         temperature: float = 0.0,
         timeout_seconds: float = 300.0,
@@ -342,6 +326,7 @@ class OpenRouterChatAdapter:
         self.api_key = api_key
         self.http_referer = http_referer
         self.app_title = app_title
+        self.fallback_model_ids = tuple(fallback_model_ids)
         self.max_output_tokens = max_output_tokens
         self.temperature = temperature
         self.timeout_seconds = timeout_seconds
@@ -374,24 +359,9 @@ class OpenRouterChatAdapter:
             payload = json.loads(exc.read().decode("utf-8"))
             error = payload.get("error")
             if isinstance(error, Mapping):
-                details = [str(error.get("message") or exc)]
-                metadata = error.get("metadata")
-                if isinstance(metadata, Mapping):
-                    for field in ("error_type", "provider_code", "provider_name"):
-                        if metadata.get(field):
-                            details.append(f"{field}={metadata[field]}")
-                    raw = metadata.get("raw")
-                    if isinstance(raw, str):
-                        try:
-                            raw = json.loads(raw)
-                        except json.JSONDecodeError:
-                            raw = None
-                    if isinstance(raw, Mapping):
-                        raw_error = raw.get("error")
-                        if isinstance(raw_error, Mapping) and raw_error.get("message"):
-                            details.append(f"provider_message={raw_error['message']}")
-                    return "; ".join(details)
-                return details[0]
+                message = error.get("message")
+                if message:
+                    return str(message)
         except (json.JSONDecodeError, UnicodeDecodeError):
             pass
         return str(exc)
@@ -421,18 +391,19 @@ class OpenRouterChatAdapter:
                 {"role": "user", "content": user_prompt},
             ],
             "max_tokens": self.max_output_tokens,
-            "temperature": self.temperature,
             "stream": False,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
                     "name": "generation_response",
                     "strict": True,
-                    "schema": OPENROUTER_GENERATION_RESPONSE_SCHEMA,
+                    "schema": GENERATION_RESPONSE_SCHEMA,
                 },
             },
             "provider": {"require_parameters": True},
         }
+        if self.fallback_model_ids:
+            payload["models"] = list(self.fallback_model_ids)
         request = urllib.request.Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
@@ -491,4 +462,9 @@ class OpenRouterChatAdapter:
                 else None
             ),
             attempts=attempt + 1,
+            resolved_model_id=(
+                str(response_payload["model"])
+                if isinstance(response_payload.get("model"), str)
+                else None
+            ),
         )

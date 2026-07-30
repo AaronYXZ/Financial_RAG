@@ -43,6 +43,19 @@ class FakeOpenAIAdapter(FakeAdapter):
     model_id = "gpt-test"
 
 
+class FakeFallbackAdapter(FakeAdapter):
+    provider = "openrouter"
+    model_id = "openai/gpt-5.6-luna-pro"
+    fallback_model_ids = (
+        "qwen/qwen3.7-plus",
+        "deepseek/deepseek-v4-flash",
+    )
+
+    def generate(self, system_prompt, user_prompt):
+        result = super().generate(system_prompt, user_prompt)
+        return replace(result, resolved_model_id="qwen/qwen3.7-plus")
+
+
 PASSAGE = PaperPassage(
     "paper::paragraph::0001", "paper", "paragraph", "Results", "Evidence", 0
 )
@@ -267,6 +280,27 @@ def test_runner_records_any_named_provider_in_eligibility_manifest(tmp_path: Pat
     manifest = json.loads(eligibility_manifest_path(output).read_text())
     assert row["provider"] == "openrouter"
     assert manifest["provider"] == "openrouter"
+
+
+def test_runner_records_fallback_chain_and_resolved_model(tmp_path: Path):
+    output = tmp_path / "fallback.jsonl"
+    run_generation_cases(
+        [CASE],
+        adapter=FakeFallbackAdapter(),
+        track="oracle-evidence",
+        output_file=output,
+    )
+
+    row = json.loads(output.read_text())
+    manifest = json.loads(eligibility_manifest_path(output).read_text())
+    expected_fallbacks = [
+        "qwen/qwen3.7-plus",
+        "deepseek/deepseek-v4-flash",
+    ]
+    assert row["model_id"] == "openai/gpt-5.6-luna-pro"
+    assert row["fallback_model_ids"] == expected_fallbacks
+    assert row["resolved_model_id"] == "qwen/qwen3.7-plus"
+    assert manifest["fallback_model_ids"] == expected_fallbacks
 
 
 def test_oracle_runner_excludes_answerable_case_without_resolved_evidence(

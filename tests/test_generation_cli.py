@@ -98,6 +98,41 @@ def test_generation_commands_accept_openrouter_model_selection():
     assert args.openrouter_app_title == "RAG Benchmark"
 
 
+def test_openrouter_model_defaults_to_luna_pro():
+    args = build_parser().parse_args(
+        [
+            "generate-retrieved",
+            "--provider",
+            "openrouter",
+            "--context-manifest",
+            "frozen.json",
+        ]
+    )
+
+    assert args.openrouter_model == "openai/gpt-5.6-luna-pro"
+    assert args.openrouter_fallback_model is None
+    assert generation_cli._openrouter_fallback_models(args) == (
+        "qwen/qwen3.7-plus",
+        "deepseek/deepseek-v4-flash",
+    )
+
+
+def test_openrouter_default_fallbacks_can_be_disabled():
+    args = build_parser().parse_args(
+        [
+            "generate-retrieved",
+            "--provider",
+            "openrouter",
+            "--no-openrouter-fallbacks",
+            "--context-manifest",
+            "frozen.json",
+        ]
+    )
+
+    assert args.openrouter_fallback_model == []
+    assert generation_cli._openrouter_fallback_models(args) == ()
+
+
 def test_openai_model_defaults_and_choices_are_explicit():
     parser = build_parser()
     default_args = parser.parse_args(["generate-oracle", "--provider", "openai"])
