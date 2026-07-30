@@ -2,6 +2,23 @@
 
 ## 2026-07-29. Deterministic Stage 3 comparison and attribution
 
+### Retrieval-first amendment
+
+- Added generation-free comparison of frozen retrieval contexts against oracle
+  evidence.
+- Ranked BM25, dense MiniLM, and hybrid MiniLM plus BM25 RRF on the same 930
+  cases. Hybrid won every registered selection metric and is frozen for
+  generation.
+- Added an OpenAI cost preflight with observed mean, observed p95, output
+  ceiling, retry exposure, current price provenance, and an optional hard budget
+  gate.
+- Revised Stage 3 so Qwen and GPT run only on the selected hybrid context.
+  GPT requires a pilot-derived estimate and explicit budget approval first.
+- Completed all 930 Qwen3-4B hybrid-context attempts with a `0.9677` valid rate,
+  `0.1938` token F1, `0.3655` citation F1, and `4.91` second p95 latency.
+- Attempted the bounded 25-case GPT-5 hybrid pilot. Every request returned
+  `429 insufficient_quota`, so the full API run remains blocked.
+
 ### Implemented
 
 - Added deterministic evidence Hit, best-reference Recall, Precision, MRR,

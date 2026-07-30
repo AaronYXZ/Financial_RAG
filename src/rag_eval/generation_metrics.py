@@ -376,6 +376,15 @@ def score_evidence_availability(record: EvaluationRecord) -> dict[str, Any]:
         for reference in record.case.references
         if not reference.unanswerable and reference.evidence_ids
     ]
+    return score_ranked_evidence_ids(context_ids, reference_sets)
+
+
+def score_ranked_evidence_ids(
+    context_ids: Sequence[str],
+    reference_sets: Sequence[set[str]],
+) -> dict[str, Any]:
+    """Score ranked passage IDs against the best complete human evidence set."""
+
     context_set = set(context_ids)
     reference_scores = []
     for reference_ids in reference_sets:

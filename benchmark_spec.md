@@ -1017,6 +1017,17 @@ exclusion, evaluator error, and other with notes.
 Choose the generator only after reviewing quality, faithfulness, citations,
 abstention, efficiency, reliability, and eligible context coverage together.
 
+Before generator comparison, rank frozen retrieval candidates against oracle
+evidence on identical validation cases. Select one configuration using complete
+evidence set, best-reference recall, hit rate, NDCG, MRR, then precision. Do not
+use generation metrics to choose retrieval. Run both generators on the selected
+context manifest.
+
+For paid API generation, run a pilot first. Record observed input and output
+tokens, project expected and conservative full-run cost using a dated official
+price table, and require explicit dollar-budget approval before the full
+validation or held-out request set.
+
 Phase 3 is complete when:
 
 - QASPER data and normalized case manifests are versioned and checksummed
@@ -1060,6 +1071,13 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
   generator comparisons.
 - [x] Implement deterministic evidence availability and primary
   retrieval-versus-generation failure attribution.
+- [x] Implement generation-free retrieval comparison against oracle evidence.
+- [x] Freeze hybrid MiniLM plus BM25 RRF at paper scope and top 5 as the selected
+  validation retrieval configuration.
+- [x] Implement pilot-derived OpenAI cost estimates and an optional hard budget
+  gate.
+- [ ] Run Qwen3-4B and GPT-5 on the selected hybrid retrieval manifest. GPT-5
+  requires explicit cost-budget approval before the full run.
 - [ ] Add the blinded claim-support and completeness evaluator.
 - [ ] Complete the stratified human-audit workflow.
 - [ ] Run full validation baselines and freeze product-derived quality,

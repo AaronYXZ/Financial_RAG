@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .generation_adapter import OpenAICompatibleAdapter, OpenAIResponsesAdapter
+from .generation_cost import estimate_openai_cost
 from .generation_comparison import (
     compare_evaluated_runs,
     compare_response_validity,
@@ -28,6 +29,7 @@ from .generation_retrieval import (
     retriever_manifest,
     write_frozen_context_manifest,
 )
+from .generation_retrieval_eval import compare_retrieval_to_oracle
 
 from .generation_data import (
     QASPER_DATASET,
@@ -163,11 +165,7 @@ def _execute_generation(
         output_file=Path(args.output_file),
         max_context_tokens=args.max_context_tokens,
         max_output_tokens=args.max_output_tokens,
-        max_cases=(
-            None
-            if track == "retrieved-context"
-            else getattr(args, "max_cases", None)
-        ),
+        max_cases=getattr(args, "max_cases", None),
         resume=args.resume,
         retrieved_contexts=retrieved_contexts,
         context_manifest_sha256=context_manifest_sha256,
@@ -359,6 +357,45 @@ def _intersect_eligibility(args: argparse.Namespace) -> int:
     return 0
 
 
+def _compare_retrieval(args: argparse.Namespace) -> int:
+    payload = compare_retrieval_to_oracle(
+        cases_file=Path(args.cases_file),
+        context_manifest_files=[Path(path) for path in args.context_manifest],
+    )
+    output_path = Path(args.output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def _estimate_cost(args: argparse.Namespace) -> int:
+    payload = estimate_openai_cost(
+        predictions_file=Path(args.predictions_file),
+        output_usage_file=(
+            Path(args.output_usage_file) if args.output_usage_file else None
+        ),
+        model=args.model,
+        target_case_count=args.target_case_count,
+        max_output_tokens=args.max_output_tokens,
+        retries=args.retries,
+        budget_usd=args.budget_usd,
+        budget_basis=args.budget_basis,
+    )
+    if args.output_file:
+        output_path = Path(args.output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0 if payload["budget_gate"]["approved"] is not False else 2
+
+
 def _add_generation_arguments(
     command: argparse.ArgumentParser,
     *,
@@ -543,6 +580,11 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Previously frozen retrieval manifest.",
     )
+    retrieved.add_argument(
+        "--max-cases",
+        type=int,
+        help="Optional ordered pilot size. Defaults to the full frozen manifest.",
+    )
     retrieved.set_defaults(handler=_generate_retrieved)
     end_to_end = subparsers.add_parser(
         "generate-end-to-end",
@@ -655,6 +697,51 @@ def build_parser() -> argparse.ArgumentParser:
     )
     intersect.add_argument("--output-file", required=True)
     intersect.set_defaults(handler=_intersect_eligibility)
+    retrieval_compare = subparsers.add_parser(
+        "compare-retrieval",
+        help="Rank frozen retrieval contexts against the oracle evidence ceiling",
+    )
+    retrieval_compare.add_argument(
+        "--cases-file",
+        default="data/generation/qasper-v1/validation.cases.jsonl",
+    )
+    retrieval_compare.add_argument(
+        "--context-manifest",
+        action="append",
+        required=True,
+        help="Frozen context manifest. Pass once per retrieval configuration.",
+    )
+    retrieval_compare.add_argument("--output-file", required=True)
+    retrieval_compare.set_defaults(handler=_compare_retrieval)
+    cost = subparsers.add_parser(
+        "estimate-cost",
+        help="Estimate full OpenAI run cost from observed pilot token usage",
+    )
+    cost.add_argument("--predictions-file", required=True)
+    cost.add_argument(
+        "--output-usage-file",
+        help=(
+            "Optional comparable pilot used only for output-token distribution "
+            "when the primary pilot has no successful outputs."
+        ),
+    )
+    cost.add_argument("--model", choices=OPENAI_MODEL_IDS, default=OPENAI_MODEL_ID)
+    cost.add_argument("--target-case-count", type=int)
+    cost.add_argument("--max-output-tokens", type=int, default=1024)
+    cost.add_argument("--retries", type=int, default=1)
+    cost.add_argument("--budget-usd", type=float)
+    cost.add_argument(
+        "--budget-basis",
+        choices=(
+            "expected",
+            "observed_p95_output",
+            "ceiling",
+            "ceiling_with_retries",
+        ),
+        default="ceiling_with_retries",
+    )
+    cost.add_argument("--output-file")
+    cost.set_defaults(handler=_estimate_cost)
     return parser
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -172,6 +172,34 @@ def test_intersect_eligibility_accepts_multiple_source_manifests():
     assert args.output_file == "common.json"
 
 
+def test_compare_retrieval_accepts_multiple_context_manifests():
+    args = build_parser().parse_args(
+        [
+            "compare-retrieval",
+            "--context-manifest",
+            "bm25.json",
+            "--context-manifest",
+            "dense.json",
+            "--output-file",
+            "comparison.json",
+        ]
+    )
+
+    assert args.context_manifest == ["bm25.json", "dense.json"]
+    assert args.output_file == "comparison.json"
+
+
+def test_estimate_cost_defaults_to_conservative_budget_basis():
+    args = build_parser().parse_args(
+        ["estimate-cost", "--predictions-file", "pilot.jsonl"]
+    )
+
+    assert args.model == "gpt-5"
+    assert args.max_output_tokens == 1024
+    assert args.retries == 1
+    assert args.budget_basis == "ceiling_with_retries"
+
+
 def test_retrieved_context_is_a_supported_track():
     args = build_parser().parse_args(
         ["run", "--track", "retrieved-context", "--context-manifest", "frozen.json"]
@@ -199,9 +227,23 @@ def test_generate_retrieved_requires_a_frozen_context_manifest():
     assert args.command == "generate-retrieved"
     assert args.context_manifest == "frozen.json"
     assert args.output_file.endswith("qwen3-4b-retrieved-v3.jsonl")
-    assert not hasattr(args, "max_cases")
+    assert args.max_cases is None
     assert not hasattr(args, "retriever")
     assert not hasattr(args, "retrieval_scope")
+
+
+def test_generate_retrieved_accepts_an_ordered_pilot_limit():
+    args = build_parser().parse_args(
+        [
+            "generate-retrieved",
+            "--context-manifest",
+            "frozen.json",
+            "--max-cases",
+            "25",
+        ]
+    )
+
+    assert args.max_cases == 25
 
 
 def test_freeze_context_accepts_dense_model_and_corpus_scope():

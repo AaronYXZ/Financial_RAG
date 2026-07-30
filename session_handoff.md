@@ -262,19 +262,27 @@ and `.idea/` are ignored.
 
 ### Stage 3. Complete deterministic comparisons
 
-1. [ ] Complete the final Qwen3-4B complete-paper validation run after restarting
-   macOS. Five of six frozen runs are complete. The remaining run has 127 unique
-   first attempts persisted.
-2. [x] Run the six registered SciDocs retrieval configurations and
+1. [x] Compare full BM25, dense, and hybrid QASPER retrieval against the oracle
+   evidence ceiling before generation. Hybrid MiniLM plus BM25 RRF at paper
+   scope and top 5 is selected.
+2. [x] Complete Qwen3-4B generation on the selected hybrid retrieval manifest.
+   All 930 attempts are persisted. Valid-response rate is `0.9677`, token F1 is
+   `0.1938`, citation F1 is `0.3655`, and p95 latency is `4.91` seconds.
+3. [ ] Run a GPT-5 pilot on the selected hybrid manifest, estimate full-run cost,
+   and obtain explicit budget approval before the full GPT-5 validation run.
+   The first 25-case pilot returned only `429 insufficient_quota`. The
+   provisional proxy estimate is `$4.07` expected and `$21.48` at the
+   ceiling-with-one-retry basis.
+4. [ ] Compare Qwen3-4B and GPT-5 generation on identical hybrid-retrieval cases.
+5. [x] Run the six registered SciDocs retrieval configurations and
    whole-document BM25 control.
-3. [x] Add paired paper-clustered bootstrap differences for matched systems.
-4. [x] Report deterministic evidence availability and the complete primary
+6. [x] Add paired paper-clustered bootstrap differences for matched systems.
+7. [x] Report deterministic evidence availability and the complete primary
    retrieval-versus-generation failure taxonomy.
 
 The Stage 3 implementation and current results are summarized in
-`stage3_deterministic_report.md`. GPT-5 quota exhaustion makes the completed
-cross-model quality comparisons non-selectable. The held-out test remains
-untouched.
+`stage3_deterministic_report.md`. Previous GPT-5 dense results remain
+quota-confounded and non-selectable. The held-out test remains untouched.
 
 ### Stage 4. Add and validate semantic judgments
 

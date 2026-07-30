@@ -492,6 +492,41 @@ can coexist with distractors. Cases without resolvable reference evidence are
 marked unavailable for attribution instead of being assigned to retrieval or
 generation.
 
+Select retrieval before generation by comparing frozen candidates directly with
+oracle evidence:
+
+```bash
+rag-generation compare-retrieval \
+  --context-manifest data/generation/qasper-v1/retrieval/bm25-paper-top5-validation-v1.json \
+  --context-manifest data/generation/qasper-v1/retrieval/dense-minilm-paper-top5-validation-v1.json \
+  --context-manifest data/generation/qasper-v1/retrieval/hybrid-minilm-paper-top5-validation-v1.json \
+  --output-file results/generation/qasper-v1/comparisons/retrieval-vs-oracle-validation-v1.json
+```
+
+The command requires identical ordered case IDs and ranks candidates without
+using generator output. The frozen selection order is complete evidence set,
+best-reference recall, hit rate, NDCG, MRR, then precision.
+
+Before a full GPT API run, project cost from an observed pilot and optionally
+enforce a hard budget:
+
+```bash
+rag-generation estimate-cost \
+  --predictions-file results/generation/qasper-v1/predictions/gpt-5-hybrid-pilot.jsonl \
+  --output-usage-file results/generation/qasper-v1/predictions/gpt-5-comparable-pilot.jsonl \
+  --model gpt-5 \
+  --target-case-count 930 \
+  --max-output-tokens 1024 \
+  --retries 1 \
+  --budget-usd 25 \
+  --budget-basis ceiling_with_retries \
+  --output-file results/generation/qasper-v1/comparisons/gpt-5-hybrid-cost.json
+```
+
+The estimator makes no API calls. It reports expected, observed-p95-output,
+ceiling, and ceiling-with-retries scenarios using a dated model price table. A
+budget is required by the Stage 3 protocol before full GPT generation.
+
 Compare two evaluated systems on identical ordered cases with paired
 paper-clustered bootstrap differences:
 

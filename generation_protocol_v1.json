@@ -31,6 +31,8 @@
     "split": "validation",
     "train_split_decision": "deferred_while_prompt_v3_is_frozen"
   },
+  "amended_on": "2026-07-29",
+  "amendment": "Stage 3 retrieval-first selection and mandatory GPT cost preflight",
   "frozen_on": "2026-07-29",
   "generation": {
     "common": {
@@ -49,6 +51,14 @@
       "tokenizer_id": "Qwen/Qwen3-4B-Instruct-2507"
     },
     "openai": {
+      "cost_gate": {
+        "budget_approval_required_before_full_run": true,
+        "command": "rag-generation estimate-cost",
+        "default_budget_basis": "ceiling_with_retries",
+        "pilot_usage_required": true,
+        "pricing_source": "https://developers.openai.com/api/docs/models/gpt-5",
+        "pricing_verified_on": "2026-07-29"
+      },
       "model_id": "gpt-5",
       "provider": "openai_responses",
       "reasoning_effort": "low",
@@ -124,14 +134,39 @@
   },
   "retrieval": {
     "candidate_k_policy": "max_top_k_times_4_or_100",
+    "candidates": [
+      "bm25-paper-top5",
+      "dense-minilm-paper-top5",
+      "hybrid-minilm-paper-top5"
+    ],
     "dense_batch_size": 32,
     "dense_model": "sentence-transformers/all-MiniLM-L6-v2",
     "hybrid_rrf_k": 60,
     "retrieval_scope": "paper",
+    "selected_context_manifest": "data/generation/qasper-v1/retrieval/hybrid-minilm-paper-top5-validation-v1.json",
+    "selection_metrics_in_order": [
+      "complete_reference_set_rate",
+      "best_reference_recall",
+      "hit_rate",
+      "best_reference_ndcg",
+      "best_reference_mrr",
+      "best_reference_precision"
+    ],
+    "selection_policy": "descending_lexicographic_against_oracle_without_generation",
     "top_k": 5
   },
   "schema_version": 1,
   "status": "protocol_frozen_performance_thresholds_pending",
+  "stage3_execution_order": [
+    "freeze_retrieval_candidates_on_identical_validation_cases",
+    "compare_retrieval_candidates_against_oracle_evidence",
+    "select_one_retrieval_configuration_without_generation_metrics",
+    "run_qwen_generation_on_selected_retrieval",
+    "run_gpt_pilot_on_selected_retrieval",
+    "estimate_gpt_full_run_cost_and_obtain_explicit_budget_approval",
+    "run_gpt_full_validation_on_selected_retrieval",
+    "compare_qwen_and_gpt_on_identical_cases"
+  ],
   "test_policy": {
     "allowed_runs": 1,
     "inspect_only_after": [
