@@ -196,6 +196,173 @@ prompt `qasper-generation-v2`, while GPT-5 uses the citation-format correction
 in `qasper-generation-v3`. Both runs use the same 25 ordered case IDs and oracle
 evidence track.
 
+### Freeze retrieval separately from generation
+
+`freeze-context` is the only fixed-context command that performs retrieval.
+Choose the scope and method there, then give the resulting immutable manifest to
+one or more `generate-retrieved` runs.
+
+Paper-scoped BM25, the default:
+
+```bash
+rag-generation freeze-context \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --retrieval-scope paper \
+  --retriever bm25 \
+  --top-k 5 \
+  --output-file data/generation/qasper-v1/retrieval/bm25-paper-top5.json
+```
+
+Corpus-scoped BM25:
+
+```bash
+rag-generation freeze-context \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --retrieval-scope corpus \
+  --retriever bm25 \
+  --top-k 5 \
+  --output-file data/generation/qasper-v1/retrieval/bm25-corpus-top5.json
+```
+
+Dense model 1, the faster MiniLM baseline:
+
+```bash
+pip install -e ".[generation,dense]"
+
+rag-generation freeze-context \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --retrieval-scope paper \
+  --retriever dense \
+  --dense-model sentence-transformers/all-MiniLM-L6-v2 \
+  --top-k 5 \
+  --output-file data/generation/qasper-v1/retrieval/dense-minilm-paper-top5.json
+```
+
+Dense model 2, the larger MPNet baseline:
+
+```bash
+rag-generation freeze-context \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --retrieval-scope paper \
+  --retriever dense \
+  --dense-model sentence-transformers/all-mpnet-base-v2 \
+  --top-k 5 \
+  --output-file data/generation/qasper-v1/retrieval/dense-mpnet-paper-top5.json
+```
+
+Hybrid BM25 plus dense retrieval with reciprocal-rank fusion:
+
+```bash
+rag-generation freeze-context \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --retrieval-scope paper \
+  --retriever hybrid \
+  --dense-model sentence-transformers/all-MiniLM-L6-v2 \
+  --hybrid-candidate-k 100 \
+  --hybrid-rrf-k 60 \
+  --top-k 5 \
+  --output-file data/generation/qasper-v1/retrieval/hybrid-minilm-paper-top5.json
+```
+
+The manifest records schema version 2, retrieval scope, method, dense model,
+batch size, BM25 parameters, hybrid parameters, source checksums, ranked passage
+IDs, and scores. Existing schema-version-1 manifests remain readable.
+
+Generation never accepts a retrieval method or scope. Replay any frozen manifest
+by changing only `--context-manifest` and the prediction filename:
+
+```bash
+rag-generation generate-retrieved \
+  --provider local \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --context-manifest data/generation/qasper-v1/retrieval/dense-minilm-paper-top5.json \
+  --output-file results/generation/qasper-v1/predictions/qwen3-4b-dense-minilm-paper-top5-v3.jsonl
+```
+
+This boundary lets different generators consume byte-identical retrieved
+contexts and lets one generator compare BM25, either dense model, and hybrid
+retrieval without retrieval running during generation.
+
+### Legacy corpus-scoped retrieved-context generator comparison
+
+Both generators were run with prompt `qasper-generation-v3`, a 1024-token output
+limit, and the same schema-version-1 corpus-scoped BM25 top-5 manifest:
+
+```bash
+rag-generation generate-retrieved \
+  --provider local \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --context-manifest data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
+  --output-file results/generation/qasper-v1/predictions/qwen3-4b-retrieved-bm25-top5-v3.jsonl \
+  --max-output-tokens 1024 \
+  --no-resume
+
+rag-generation generate-retrieved \
+  --provider openai \
+  --env-file .env \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --context-manifest data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
+  --output-file results/generation/qasper-v1/predictions/gpt-5-retrieved-bm25-top5-v3.jsonl \
+  --max-output-tokens 1024 \
+  --no-resume
+```
+
+Qwen3 initially completed 24 cases and produced one invalid-schema response that
+omitted the required `abstain` key. A resume retry skipped the 24 valid cases and
+reproduced the same deterministic error. GPT-5 completed all 25 cases without an
+error.
+
+Generate the metrics with:
+
+```bash
+rag-generation metrics \
+  --track retrieved-context \
+  --model mlx-community/Qwen3-4B-Instruct-2507-4bit \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --predictions-file results/generation/qasper-v1/predictions/qwen3-4b-retrieved-bm25-top5-v3.jsonl \
+  --output-dir results/generation/qasper-v1/metrics/qwen3-4b-retrieved-bm25-top5-v3
+
+rag-generation metrics \
+  --track retrieved-context \
+  --model gpt-5 \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --predictions-file results/generation/qasper-v1/predictions/gpt-5-retrieved-bm25-top5-v3.jsonl \
+  --output-dir results/generation/qasper-v1/metrics/gpt-5-retrieved-bm25-top5-v3
+```
+
+| Metric | Qwen3 4B local | GPT-5 API | GPT-5 minus Qwen3 |
+| --- | ---: | ---: | ---: |
+| Valid response rate | 0.9600 | 1.0000 | +0.0400 |
+| Answerability accuracy | 0.8800 | 0.6800 | -0.2000 |
+| False abstention rate | 0.0800 | 0.3200 | +0.2400 |
+| Normalized exact match | 0.0000 | 0.0000 | 0.0000 |
+| Answer token F1 | 0.1218 | 0.0858 | -0.0360 |
+| Citation precision | 0.1023 | 0.1588 | +0.0566 |
+| Citation recall | 0.1250 | 0.1618 | +0.0368 |
+| Citation F1 | 0.1023 | 0.1503 | +0.0481 |
+| Expected calibration error | 0.7085 | 0.4202 | -0.2883 |
+| Area under risk-coverage curve | 0.8505 | 0.8733 | +0.0228 |
+| Mean latency, seconds | 2.8957 | 3.9132 | +1.0175 |
+| Mean total tokens | 1041.12 | 1278.24 | +237.12 |
+
+Lower is better for false abstention rate, expected calibration error, and area
+under the risk-coverage curve. Qwen3 had higher answer token F1 on 12 matched
+cases, GPT-5 on 6, with 7 ties. Paper-clustered 95% intervals for answer token F1
+were `[0.0698, 0.1791]` for Qwen3 and `[0.0336, 0.1632]` for GPT-5. Citation F1
+intervals were `[0.0000, 0.2269]` and `[0.0000, 0.3389]`, respectively. These are
+individual-run intervals, not paired intervals for the model differences.
+
+All 25 source cases are labeled answerable. GPT-5 abstained on 8, while Qwen3
+abstained on 2 and had one invalid response. The low answer and citation scores
+show that the frozen BM25 contexts often do not contain sufficient reference
+evidence. As with the oracle comparison, provider token counts and latency are
+not directly comparable, and the evaluator does not calculate OpenAI API cost.
+
 ### Three generation tasks
 
 Use `generate-oracle` to measure generation with gold evidence and no retrieval
@@ -223,7 +390,8 @@ rag-generation generate-retrieved \
   --max-output-tokens 1024
 ```
 
-Use `generate-end-to-end` to run BM25 retrieval and generation in one command.
+Use `generate-end-to-end` as a convenience wrapper around configurable retrieval
+and generation.
 The retrieval result is frozen before the first model call, so the complete run
 can be replayed later with `generate-retrieved`:
 
@@ -231,6 +399,8 @@ can be replayed later with `generate-retrieved`:
 rag-generation generate-end-to-end \
   --cases-file data/generation/qasper-v1/validation.cases.jsonl \
   --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
+  --retrieval-scope paper \
+  --retriever bm25 \
   --top-k 5 \
   --context-manifest data/generation/qasper-v1/retrieval/end-to-end-bm25-top5-v1.json \
   --output-file results/generation/qasper-v1/predictions/qwen3-4b-end-to-end-bm25-top5-v1.jsonl \
@@ -272,11 +442,13 @@ The lower-level equivalent of the retrieved workflow remains available:
 ```bash
 rag-generation freeze-context \
   --eligibility-file results/generation/qasper-v1/predictions/qwen3-4b-track-b-v2.eligibility.json \
-  --output-file data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
+  --retrieval-scope paper \
+  --retriever bm25 \
+  --output-file data/generation/qasper-v1/retrieval/bm25-paper-top5.json \
   --top-k 5
 
 rag-generation generate-retrieved \
-  --context-manifest data/generation/qasper-v1/retrieval/bm25-top5-track-b-v2.json \
+  --context-manifest data/generation/qasper-v1/retrieval/bm25-paper-top5.json \
   --output-file results/generation/qasper-v1/predictions/qwen3-4b-retrieved-bm25-top5-v1.jsonl
 ```
 

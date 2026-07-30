@@ -7,6 +7,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from typing import Any
 
 from rag_eval.retrievers import Corpus, Queries, Run, tokenize
 
@@ -95,6 +96,7 @@ class PreparedDenseRetriever:
         corpus: Corpus,
         model_name: str,
         batch_size: int = 32,
+        model: Any | None = None,
     ):
         try:
             import numpy as np
@@ -107,7 +109,7 @@ class PreparedDenseRetriever:
 
         self.np = np
         self.model_name = model_name
-        self.model = SentenceTransformer(model_name)
+        self.model = model if model is not None else SentenceTransformer(model_name)
         self.doc_ids = list(corpus)
         document_texts = [
             f"{corpus[doc_id].get('title', '')}\n{corpus[doc_id].get('text', '')}".strip()

@@ -14,10 +14,13 @@ from .generation_comparison import compare_response_validity, write_comparison
 from .generation_metrics import evaluate_prediction_files, load_eligibility_manifest
 from .generation_runner import eligibility_manifest_path, run_generation_cases
 from .generation_retrieval import (
+    DENSE_MODEL_1,
+    DENSE_MODEL_2,
     file_sha256,
-    freeze_bm25_contexts,
+    freeze_retrieved_contexts,
     frozen_contexts_by_case,
     load_frozen_context_manifest,
+    retriever_manifest,
     write_frozen_context_manifest,
 )
 
@@ -189,14 +192,35 @@ def _freeze_context_payload(
     eligibility_file: Path,
     output_file: Path,
     top_k: int,
+    retriever: str,
+    retrieval_scope: str,
+    dense_model: str,
+    dense_batch_size: int,
+    hybrid_rrf_k: int,
+    hybrid_candidate_k: int | None,
 ) -> dict:
     cases = _load_cases(cases_path)
     eligibility = load_eligibility_manifest(eligibility_file)
     case_ids = eligibility["eligible_case_ids"]
-    contexts = freeze_bm25_contexts(
+    contexts = freeze_retrieved_contexts(
         cases,
         eligible_case_ids=case_ids,
         top_k=top_k,
+        method=retriever,
+        scope=retrieval_scope,
+        dense_model=dense_model,
+        dense_batch_size=dense_batch_size,
+        hybrid_rrf_k=hybrid_rrf_k,
+        hybrid_candidate_k=hybrid_candidate_k,
+    )
+    retriever_metadata = retriever_manifest(
+        method=retriever,
+        scope=retrieval_scope,
+        top_k=top_k,
+        dense_model=dense_model,
+        dense_batch_size=dense_batch_size,
+        hybrid_rrf_k=hybrid_rrf_k,
+        hybrid_candidate_k=hybrid_candidate_k,
     )
     return write_frozen_context_manifest(
         output_file,
@@ -205,6 +229,8 @@ def _freeze_context_payload(
         eligible_case_ids=case_ids,
         contexts=contexts,
         top_k=top_k,
+        retrieval_scope=retrieval_scope,
+        retriever=retriever_metadata,
     )
 
 
@@ -214,6 +240,12 @@ def _freeze_context(args: argparse.Namespace) -> int:
         eligibility_file=Path(args.eligibility_file),
         output_file=Path(args.output_file),
         top_k=args.top_k,
+        retriever=args.retriever,
+        retrieval_scope=args.retrieval_scope,
+        dense_model=args.dense_model,
+        dense_batch_size=args.dense_batch_size,
+        hybrid_rrf_k=args.hybrid_rrf_k,
+        hybrid_candidate_k=args.hybrid_candidate_k,
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
@@ -226,6 +258,12 @@ def _generate_end_to_end(args: argparse.Namespace) -> int:
         eligibility_file=Path(args.eligibility_file),
         output_file=context_manifest,
         top_k=args.top_k,
+        retriever=args.retriever,
+        retrieval_scope=args.retrieval_scope,
+        dense_model=args.dense_model,
+        dense_batch_size=args.dense_batch_size,
+        hybrid_rrf_k=args.hybrid_rrf_k,
+        hybrid_candidate_k=args.hybrid_candidate_k,
     )
     print(
         json.dumps(
@@ -345,6 +383,36 @@ def _add_provider_arguments(command: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_retrieval_arguments(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
+        "--retriever",
+        choices=("bm25", "dense", "hybrid"),
+        default="bm25",
+        help="Retrieval method used to create the frozen context manifest.",
+    )
+    command.add_argument(
+        "--retrieval-scope",
+        choices=("paper", "corpus"),
+        default="paper",
+        help="Search only the associated paper or the complete cases-file corpus.",
+    )
+    command.add_argument(
+        "--dense-model",
+        default=DENSE_MODEL_1,
+        help=(
+            "Sentence-transformers model used by dense and hybrid retrieval. "
+            f"Common alternatives: {DENSE_MODEL_1}, {DENSE_MODEL_2}."
+        ),
+    )
+    command.add_argument("--dense-batch-size", type=int, default=32)
+    command.add_argument("--hybrid-rrf-k", type=int, default=60)
+    command.add_argument(
+        "--hybrid-candidate-k",
+        type=int,
+        help="Candidates per component before RRF. Defaults to max(top_k * 4, 100).",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rag-generation",
@@ -412,7 +480,7 @@ def build_parser() -> argparse.ArgumentParser:
         retrieved,
         default_output_file=(
             "results/generation/qasper-v1/predictions/"
-            "qwen3-4b-retrieved-bm25-top5-v1.jsonl"
+            "qwen3-4b-retrieved-v3.jsonl"
         ),
         include_max_cases=False,
     )
@@ -430,7 +498,7 @@ def build_parser() -> argparse.ArgumentParser:
         end_to_end,
         default_output_file=(
             "results/generation/qasper-v1/predictions/"
-            "qwen3-4b-end-to-end-bm25-top5-v1.jsonl"
+            "qwen3-4b-end-to-end-v3.jsonl"
         ),
         include_max_cases=False,
     )
@@ -441,14 +509,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     end_to_end.add_argument(
         "--context-manifest",
-        default="data/generation/qasper-v1/retrieval/end-to-end-bm25-top5-v1.json",
+        default="data/generation/qasper-v1/retrieval/end-to-end-retrieval-v2.json",
         help="Path where the end-to-end command freezes its retrieval output.",
     )
     end_to_end.add_argument("--top-k", type=int, default=5)
+    _add_retrieval_arguments(end_to_end)
     end_to_end.set_defaults(handler=_generate_end_to_end)
     freeze = subparsers.add_parser(
         "freeze-context",
-        help="Freeze BM25 top-K passages for an existing eligible-case set",
+        help="Freeze BM25, dense, or hybrid passages for fixed-context generation",
     )
     freeze.add_argument(
         "--cases-file",
@@ -461,9 +530,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     freeze.add_argument(
         "--output-file",
-        default="data/generation/qasper-v1/retrieval/qwen3-4b-bm25-top5.json",
+        default="data/generation/qasper-v1/retrieval/bm25-paper-top5.json",
     )
     freeze.add_argument("--top-k", type=int, default=5)
+    _add_retrieval_arguments(freeze)
     freeze.set_defaults(handler=_freeze_context)
     metrics = subparsers.add_parser(
         "metrics",

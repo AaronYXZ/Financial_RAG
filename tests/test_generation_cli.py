@@ -96,7 +96,10 @@ def test_freeze_context_defaults_to_bm25_top_five():
     )
 
     assert args.top_k == 5
-    assert args.output_file.endswith("qwen3-4b-bm25-top5.json")
+    assert args.retriever == "bm25"
+    assert args.retrieval_scope == "paper"
+    assert args.dense_model == "sentence-transformers/all-MiniLM-L6-v2"
+    assert args.output_file.endswith("bm25-paper-top5.json")
 
 
 def test_retrieved_context_is_a_supported_track():
@@ -125,8 +128,30 @@ def test_generate_retrieved_requires_a_frozen_context_manifest():
 
     assert args.command == "generate-retrieved"
     assert args.context_manifest == "frozen.json"
-    assert args.output_file.endswith("qwen3-4b-retrieved-bm25-top5-v1.jsonl")
+    assert args.output_file.endswith("qwen3-4b-retrieved-v3.jsonl")
     assert not hasattr(args, "max_cases")
+    assert not hasattr(args, "retriever")
+    assert not hasattr(args, "retrieval_scope")
+
+
+def test_freeze_context_accepts_dense_model_and_corpus_scope():
+    args = build_parser().parse_args(
+        [
+            "freeze-context",
+            "--eligibility-file",
+            "eligible.json",
+            "--retriever",
+            "dense",
+            "--retrieval-scope",
+            "corpus",
+            "--dense-model",
+            "sentence-transformers/all-mpnet-base-v2",
+        ]
+    )
+
+    assert args.retriever == "dense"
+    assert args.retrieval_scope == "corpus"
+    assert args.dense_model == "sentence-transformers/all-mpnet-base-v2"
 
 
 def test_generate_end_to_end_freezes_retrieval_before_generation():
@@ -137,8 +162,8 @@ def test_generate_end_to_end_freezes_retrieval_before_generation():
     assert args.command == "generate-end-to-end"
     assert args.eligibility_file == "eligible.json"
     assert args.top_k == 5
-    assert args.context_manifest.endswith("end-to-end-bm25-top5-v1.json")
-    assert args.output_file.endswith("qwen3-4b-end-to-end-bm25-top5-v1.jsonl")
+    assert args.context_manifest.endswith("end-to-end-retrieval-v2.json")
+    assert args.output_file.endswith("qwen3-4b-end-to-end-v3.jsonl")
 
 
 def test_end_to_end_handler_passes_new_manifest_to_generation(
@@ -152,6 +177,12 @@ def test_end_to_end_handler_passes_new_manifest_to_generation(
         eligibility_file=str(tmp_path / "eligible.json"),
         context_manifest=str(context_manifest),
         top_k=7,
+        retriever="hybrid",
+        retrieval_scope="paper",
+        dense_model="dense-model",
+        dense_batch_size=16,
+        hybrid_rrf_k=40,
+        hybrid_candidate_k=20,
     )
 
     def fake_freeze(**kwargs):
@@ -180,6 +211,9 @@ def test_end_to_end_handler_passes_new_manifest_to_generation(
     assert generation_cli._generate_end_to_end(args) == 0
     assert calls[0][0] == "freeze"
     assert calls[0][1]["top_k"] == 7
+    assert calls[0][1]["retriever"] == "hybrid"
+    assert calls[0][1]["retrieval_scope"] == "paper"
+    assert calls[0][1]["dense_model"] == "dense-model"
     assert calls[1] == (
         "generate",
         {

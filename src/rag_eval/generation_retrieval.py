@@ -4,14 +4,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Literal, Mapping
 
-from .benchmark_retrievers import PreparedBM25Retriever
+from .benchmark_retrievers import (
+    PreparedBM25Retriever,
+    PreparedDenseRetriever,
+    reciprocal_rank_fusion,
+)
 from .generation_data import GenerationCase, PaperPassage
 
 
-FROZEN_CONTEXT_SCHEMA_VERSION = 1
+FROZEN_CONTEXT_SCHEMA_VERSION = 2
+SUPPORTED_FROZEN_CONTEXT_SCHEMA_VERSIONS = (1, 2)
+RetrievalMethod = Literal["bm25", "dense", "hybrid"]
+RetrievalScope = Literal["paper", "corpus"]
+
+DENSE_MODEL_1 = "sentence-transformers/all-MiniLM-L6-v2"
+DENSE_MODEL_2 = "sentence-transformers/all-mpnet-base-v2"
 
 
 def file_sha256(path: Path) -> str:
@@ -37,31 +48,120 @@ def freeze_bm25_contexts(
     *,
     eligible_case_ids: Iterable[str],
     top_k: int,
+    scope: RetrievalScope = "corpus",
 ) -> list[dict[str, Any]]:
-    """Retrieve once over the normalized QASPER passage corpus and freeze rankings."""
+    """Backward-compatible BM25 wrapper over the configurable retrieval path."""
+
+    return freeze_retrieved_contexts(
+        cases,
+        eligible_case_ids=eligible_case_ids,
+        top_k=top_k,
+        method="bm25",
+        scope=scope,
+    )
+
+
+def freeze_retrieved_contexts(
+    cases: Iterable[GenerationCase],
+    *,
+    eligible_case_ids: Iterable[str],
+    top_k: int,
+    method: RetrievalMethod,
+    scope: RetrievalScope,
+    dense_model: str = DENSE_MODEL_1,
+    dense_batch_size: int = 32,
+    hybrid_rrf_k: int = 60,
+    hybrid_candidate_k: int | None = None,
+) -> list[dict[str, Any]]:
+    """Freeze ranked contexts with an explicit retrieval method and corpus scope."""
 
     if top_k <= 0:
         raise ValueError("top_k must be positive")
-    cases_by_id = {case.case_id: case for case in cases}
+    if method not in ("bm25", "dense", "hybrid"):
+        raise ValueError(f"Unsupported retrieval method: {method}")
+    if scope not in ("paper", "corpus"):
+        raise ValueError(f"Unsupported retrieval scope: {scope}")
+    if dense_batch_size <= 0:
+        raise ValueError("dense_batch_size must be positive")
+    if hybrid_rrf_k <= 0:
+        raise ValueError("hybrid_rrf_k must be positive")
+    if hybrid_candidate_k is not None and hybrid_candidate_k < top_k:
+        raise ValueError("hybrid_candidate_k must be at least top_k")
+
+    case_list = list(cases)
+    cases_by_id = {case.case_id: case for case in case_list}
     case_ids = list(eligible_case_ids)
     missing = [case_id for case_id in case_ids if case_id not in cases_by_id]
     if missing:
         raise ValueError(f"Eligible cases are missing from the case file: {missing[:3]}")
 
-    passages = unique_passages(cases_by_id.values())
-    corpus = {
-        passage_id: {
-            "title": passage.section_name,
-            "text": passage.text,
+    passages = unique_passages(case_list)
+    query_groups: list[tuple[list[str], dict[str, PaperPassage]]] = []
+    if scope == "corpus":
+        query_groups.append((case_ids, passages))
+    else:
+        case_ids_by_paper: defaultdict[str, list[str]] = defaultdict(list)
+        for case_id in case_ids:
+            case_ids_by_paper[cases_by_id[case_id].paper_id].append(case_id)
+        passages_by_paper: defaultdict[str, dict[str, PaperPassage]] = defaultdict(dict)
+        for passage_id, passage in passages.items():
+            passages_by_paper[passage.paper_id][passage_id] = passage
+        query_groups.extend(
+            (paper_case_ids, passages_by_paper[paper_id])
+            for paper_id, paper_case_ids in case_ids_by_paper.items()
+        )
+
+    scores_by_case: dict[str, dict[str, float]] = {}
+    shared_dense_model: Any | None = None
+    for group_case_ids, group_passages in query_groups:
+        corpus = {
+            passage_id: {
+                "title": passage.section_name,
+                "text": passage.text,
+            }
+            for passage_id, passage in group_passages.items()
         }
-        for passage_id, passage in passages.items()
-    }
-    queries = {case_id: cases_by_id[case_id].question for case_id in case_ids}
-    result = PreparedBM25Retriever(corpus).search(queries, top_k=top_k)
+        queries = {
+            case_id: cases_by_id[case_id].question for case_id in group_case_ids
+        }
+        if method == "bm25":
+            scores_by_case.update(
+                PreparedBM25Retriever(corpus).search(queries, top_k=top_k).run
+            )
+            continue
+
+        dense = PreparedDenseRetriever(
+            corpus,
+            model_name=dense_model,
+            batch_size=dense_batch_size,
+            model=shared_dense_model,
+        )
+        shared_dense_model = dense.model
+        if method == "dense":
+            scores_by_case.update(dense.search(queries, top_k=top_k).run)
+            continue
+
+        candidate_k = min(
+            len(corpus),
+            hybrid_candidate_k
+            if hybrid_candidate_k is not None
+            else max(top_k * 4, 100),
+        )
+        lexical_run = PreparedBM25Retriever(corpus).search(
+            queries, top_k=candidate_k
+        ).run
+        dense_run = dense.search(queries, top_k=candidate_k).run
+        fused_run, _ = reciprocal_rank_fusion(
+            lexical_run,
+            dense_run,
+            top_k=top_k,
+            rrf_k=hybrid_rrf_k,
+        )
+        scores_by_case.update(fused_run)
 
     contexts: list[dict[str, Any]] = []
     for case_id in case_ids:
-        scores = result.run.get(case_id, {})
+        scores = scores_by_case.get(case_id, {})
         ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
         contexts.append(
             {
@@ -81,15 +181,20 @@ def write_frozen_context_manifest(
     eligible_case_ids: list[str],
     contexts: list[dict[str, Any]],
     top_k: int,
+    retrieval_scope: RetrievalScope = "corpus",
+    retriever: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if retriever is None:
+        retriever = retriever_manifest(
+            method="bm25",
+            scope=retrieval_scope,
+            top_k=top_k,
+        )
     payload = {
         "schema_version": FROZEN_CONTEXT_SCHEMA_VERSION,
         "track": "retrieved-context",
-        "retriever": {
-            "name": "bm25",
-            "implementation": "rag_eval.benchmark_retrievers.PreparedBM25Retriever",
-            "parameters": {"k1": 1.5, "b": 0.75, "top_k": top_k},
-        },
+        "retrieval_scope": retrieval_scope,
+        "retriever": dict(retriever),
         "cases_file": str(cases_file),
         "cases_sha256": file_sha256(cases_file),
         "source_eligibility_file": str(eligibility_file),
@@ -103,12 +208,76 @@ def write_frozen_context_manifest(
     return payload
 
 
+def retriever_manifest(
+    *,
+    method: RetrievalMethod,
+    scope: RetrievalScope,
+    top_k: int,
+    dense_model: str = DENSE_MODEL_1,
+    dense_batch_size: int = 32,
+    hybrid_rrf_k: int = 60,
+    hybrid_candidate_k: int | None = None,
+) -> dict[str, Any]:
+    parameters: dict[str, Any] = {
+        "scope": scope,
+        "top_k": top_k,
+    }
+    implementations = {
+        "bm25": "rag_eval.benchmark_retrievers.PreparedBM25Retriever",
+        "dense": "rag_eval.benchmark_retrievers.PreparedDenseRetriever",
+        "hybrid": "rag_eval.benchmark_retrievers.reciprocal_rank_fusion",
+    }
+    if method in ("bm25", "hybrid"):
+        parameters.update({"k1": 1.5, "b": 0.75})
+    if method in ("dense", "hybrid"):
+        parameters.update(
+            {
+                "dense_model": dense_model,
+                "dense_batch_size": dense_batch_size,
+            }
+        )
+    if method == "hybrid":
+        parameters.update(
+            {
+                "rrf_k": hybrid_rrf_k,
+                "candidate_k": (
+                    hybrid_candidate_k
+                    if hybrid_candidate_k is not None
+                    else max(top_k * 4, 100)
+                ),
+            }
+        )
+    return {
+        "name": method,
+        "implementation": implementations[method],
+        "parameters": parameters,
+    }
+
+
 def load_frozen_context_manifest(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("schema_version") != FROZEN_CONTEXT_SCHEMA_VERSION:
+    if payload.get("schema_version") not in SUPPORTED_FROZEN_CONTEXT_SCHEMA_VERSIONS:
         raise ValueError("Unsupported frozen context manifest schema version")
     if payload.get("track") != "retrieved-context":
         raise ValueError("Frozen context manifest track must be retrieved-context")
+    if payload["schema_version"] >= 2:
+        if payload.get("retrieval_scope") not in ("paper", "corpus"):
+            raise ValueError("Frozen context manifest has an invalid retrieval_scope")
+        retriever = payload.get("retriever")
+        if not isinstance(retriever, Mapping) or retriever.get("name") not in (
+            "bm25",
+            "dense",
+            "hybrid",
+        ):
+            raise ValueError("Frozen context manifest has invalid retriever metadata")
+        parameters = retriever.get("parameters")
+        if (
+            not isinstance(parameters, Mapping)
+            or parameters.get("scope") != payload["retrieval_scope"]
+        ):
+            raise ValueError(
+                "Frozen context retriever scope does not match retrieval_scope"
+            )
     eligible = payload.get("eligible_case_ids")
     contexts = payload.get("contexts")
     if not isinstance(eligible, list) or not all(isinstance(item, str) for item in eligible):

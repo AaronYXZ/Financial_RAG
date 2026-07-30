@@ -9,7 +9,7 @@ from typing import Iterable, Mapping
 
 from .generation_adapter import GenerationAdapter
 from .generation_context import ContextTrack, build_fixed_context
-from .generation_data import GenerationCase
+from .generation_data import GenerationCase, PaperPassage
 from .generation_prompt import (
     PROMPT_VERSION,
     SYSTEM_PROMPT,
@@ -60,11 +60,13 @@ def _select_eligible_cases(
     max_output_tokens: int,
     max_cases: int | None,
     retrieved_contexts: Mapping[str, tuple[str, ...]] | None = None,
+    passage_lookup: Mapping[str, PaperPassage] | None = None,
 ) -> tuple[list[EligibleCase], dict[str, int]]:
     eligible: list[EligibleCase] = []
     exclusions = {"track_filter": 0, "context_limit": 0}
     case_list = list(cases)
-    passage_lookup = unique_passages(case_list)
+    if passage_lookup is None:
+        passage_lookup = unique_passages(case_list)
     for case in case_list:
         if track == "oracle-evidence" and case.answerability != "answerable":
             exclusions["track_filter"] += 1
@@ -165,6 +167,7 @@ def run_generation_cases(
     context_manifest_sha256: str | None = None,
 ) -> dict[str, int]:
     case_list = list(cases)
+    passage_lookup = unique_passages(case_list)
     if track == "retrieved-context":
         if retrieved_contexts is None or not context_manifest_sha256:
             raise ValueError(
@@ -185,6 +188,7 @@ def run_generation_cases(
         max_output_tokens=max_output_tokens,
         max_cases=max_cases,
         retrieved_contexts=retrieved_contexts,
+        passage_lookup=passage_lookup,
     )
     _write_eligibility_manifest(
         eligibility_file or eligibility_manifest_path(output_file),

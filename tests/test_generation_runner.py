@@ -142,6 +142,55 @@ def test_runner_uses_frozen_retrieved_context_and_records_manifest_hash(tmp_path
     assert manifest["context_manifest_sha256"] == "abc123"
 
 
+def test_runner_resolves_retrieved_passages_from_the_full_case_corpus(tmp_path: Path):
+    other_passage = PaperPassage(
+        "other-paper::paragraph::0001",
+        "other-paper",
+        "paragraph",
+        "Results",
+        "Cross-paper evidence.",
+        0,
+    )
+    other_case = GenerationCase(
+        case_id="q2",
+        split="validation",
+        paper_id="other-paper",
+        title="Other paper",
+        question="What else is reported?",
+        answerability="answerable",
+        paper_passages=(other_passage,),
+        oracle_passage_ids=(other_passage.passage_id,),
+        references=(REFERENCE,),
+    )
+
+    class CrossPaperAdapter(FakeAdapter):
+        def generate(self, system_prompt, user_prompt):
+            return AdapterResult(
+                text=(
+                    '{"answer":"Cross-paper evidence.","abstain":false,'
+                    '"citations":["other-paper::paragraph::0001"],"confidence":0.9}'
+                ),
+                latency_seconds=0.1,
+                input_tokens=100,
+                output_tokens=20,
+            )
+
+    output = tmp_path / "cross-paper-retrieved.jsonl"
+    counts = run_generation_cases(
+        [CASE, other_case],
+        adapter=CrossPaperAdapter(),
+        track="retrieved-context",
+        output_file=output,
+        max_cases=None,
+        retrieved_contexts={CASE.case_id: (other_passage.passage_id,)},
+        context_manifest_sha256="abc123",
+    )
+
+    assert counts["completed"] == 1
+    row = json.loads(output.read_text())
+    assert row["context_passage_ids"] == [other_passage.passage_id]
+
+
 def test_runner_requires_frozen_context_identity(tmp_path: Path):
     with pytest.raises(ValueError, match="requires frozen contexts"):
         run_generation_cases(
