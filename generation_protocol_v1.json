@@ -52,16 +52,21 @@
     },
     "openai": {
       "cost_gate": {
+        "approved_budget_usd": 10.0,
         "budget_approval_required_before_full_run": true,
+        "budget_basis": "ceiling_with_retries",
         "command": "rag-generation estimate-cost",
-        "default_budget_basis": "ceiling_with_retries",
+        "estimated_ceiling_usd": 8.359491,
         "pilot_usage_required": true,
         "pricing_source": "https://developers.openai.com/api/docs/models/gpt-5",
-        "pricing_verified_on": "2026-07-29"
+        "pricing_verified_on": "2026-07-29",
+        "status": "approved_blocked_on_insufficient_quota"
       },
+      "max_output_tokens": 768,
       "model_id": "gpt-5",
       "provider": "openai_responses",
       "reasoning_effort": "low",
+      "request_retries": 0,
       "response_format": "strict_json_schema",
       "store": false
     }

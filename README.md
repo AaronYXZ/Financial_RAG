@@ -516,9 +516,9 @@ rag-generation estimate-cost \
   --output-usage-file results/generation/qasper-v1/predictions/gpt-5-comparable-pilot.jsonl \
   --model gpt-5 \
   --target-case-count 930 \
-  --max-output-tokens 1024 \
-  --retries 1 \
-  --budget-usd 25 \
+  --max-output-tokens 768 \
+  --retries 0 \
+  --budget-usd 10 \
   --budget-basis ceiling_with_retries \
   --output-file results/generation/qasper-v1/comparisons/gpt-5-hybrid-cost.json
 ```

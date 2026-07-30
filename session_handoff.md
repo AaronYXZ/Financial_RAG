@@ -270,9 +270,10 @@ and `.idea/` are ignored.
    `0.1938`, citation F1 is `0.3655`, and p95 latency is `4.91` seconds.
 3. [ ] Run a GPT-5 pilot on the selected hybrid manifest, estimate full-run cost,
    and obtain explicit budget approval before the full GPT-5 validation run.
-   The first 25-case pilot returned only `429 insufficient_quota`. The
-   provisional proxy estimate is `$4.07` expected and `$21.48` at the
-   ceiling-with-one-retry basis.
+   A `$10` budget is approved with a 768-token output cap and zero retries. The
+   conservative full-run estimate is `$8.36`. Both 25-case pilot attempts
+   returned only `429 insufficient_quota`, so API billing or credits must be
+   restored before retrying.
 4. [ ] Compare Qwen3-4B and GPT-5 generation on identical hybrid-retrieval cases.
 5. [x] Run the six registered SciDocs retrieval configurations and
    whole-document BM25 control.

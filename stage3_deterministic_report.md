@@ -57,10 +57,11 @@ supplies 663 successful output-usage records as a provisional proxy. For a
 - cost if every case reaches the 1,024-token ceiling: `$10.74`
 - ceiling with one fully billed retry for every case: `$21.48`
 
-Pricing was verified on July 29, 2026. A dollar budget must be supplied to
-`rag-generation estimate-cost` and pass the selected budget basis before the
-full GPT-5 run is authorized. A clean successful hybrid pilot is also required
-after API quota is restored.
+Pricing was verified on July 29, 2026. A `$10` budget is approved with a
+GPT-specific 768-token output cap and zero retries. The conservative full-run
+ceiling is `$8.36`. The revised 25-case pilot also returned only
+`429 insufficient_quota`, so a clean pilot is still required after API billing
+or credits are restored.
 
 ## Completed QASPER validation results
 

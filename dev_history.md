@@ -18,6 +18,9 @@
   `0.1938` token F1, `0.3655` citation F1, and `4.91` second p95 latency.
 - Attempted the bounded 25-case GPT-5 hybrid pilot. Every request returned
   `429 insufficient_quota`, so the full API run remains blocked.
+- Approved a `$10` GPT-5 budget with a 768-token output cap and zero retries.
+  The conservative gate passes at `$8.36`, but a second bounded pilot still
+  returned only `429 insufficient_quota`.
 
 ### Implemented
 
