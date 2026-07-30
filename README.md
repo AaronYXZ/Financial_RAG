@@ -152,6 +152,9 @@ OpenRouter attribution headers. The app title defaults to `Project Local RAG`.
 OpenRouter token counting before a request uses a stable `o200k_base` estimate
 because model slugs can span tokenizer families. Each completed result records
 the authoritative prompt and completion token counts returned by OpenRouter.
+The provider-facing schema omits constraints unsupported by some vendors. The
+runner still validates the complete frozen response contract locally, including
+the confidence range, citation count, citation IDs, and answer length.
 
 The generation experiment runner has three diagnostic tracks:
 

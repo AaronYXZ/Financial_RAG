@@ -55,6 +55,24 @@ GENERATION_RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
+# Anthropic structured outputs reject validation constraints such as minimum,
+# maximum, and maxLength. Keep the provider-facing schema portable, then enforce
+# the complete frozen response contract in parse_generation_response.
+OPENROUTER_GENERATION_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string"},
+        "abstain": {"type": "boolean"},
+        "citations": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "confidence": {"type": "number"},
+    },
+    "required": ["answer", "abstain", "citations", "confidence"],
+    "additionalProperties": False,
+}
+
 
 class OpenAICompatibleAdapter:
     """Call a local `/chat/completions` endpoint and count with its HF tokenizer."""
@@ -356,9 +374,24 @@ class OpenRouterChatAdapter:
             payload = json.loads(exc.read().decode("utf-8"))
             error = payload.get("error")
             if isinstance(error, Mapping):
-                message = error.get("message")
-                if message:
-                    return str(message)
+                details = [str(error.get("message") or exc)]
+                metadata = error.get("metadata")
+                if isinstance(metadata, Mapping):
+                    for field in ("error_type", "provider_code", "provider_name"):
+                        if metadata.get(field):
+                            details.append(f"{field}={metadata[field]}")
+                    raw = metadata.get("raw")
+                    if isinstance(raw, str):
+                        try:
+                            raw = json.loads(raw)
+                        except json.JSONDecodeError:
+                            raw = None
+                    if isinstance(raw, Mapping):
+                        raw_error = raw.get("error")
+                        if isinstance(raw_error, Mapping) and raw_error.get("message"):
+                            details.append(f"provider_message={raw_error['message']}")
+                    return "; ".join(details)
+                return details[0]
         except (json.JSONDecodeError, UnicodeDecodeError):
             pass
         return str(exc)
@@ -387,7 +420,7 @@ class OpenRouterChatAdapter:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "max_completion_tokens": self.max_output_tokens,
+            "max_tokens": self.max_output_tokens,
             "temperature": self.temperature,
             "stream": False,
             "response_format": {
@@ -395,7 +428,7 @@ class OpenRouterChatAdapter:
                 "json_schema": {
                     "name": "generation_response",
                     "strict": True,
-                    "schema": GENERATION_RESPONSE_SCHEMA,
+                    "schema": OPENROUTER_GENERATION_RESPONSE_SCHEMA,
                 },
             },
             "provider": {"require_parameters": True},
