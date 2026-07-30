@@ -1,3 +1,4 @@
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -18,6 +19,36 @@ def test_generation_run_defaults_to_local_qwen_smoke_test():
     assert args.max_cases == 25
     assert args.retries == 1
     assert args.resume is True
+
+
+def test_all_cases_overrides_smoke_limit_for_full_validation():
+    run_args = build_parser().parse_args(["run", "--all-cases"])
+    oracle_args = build_parser().parse_args(["generate-oracle", "--all-cases"])
+
+    assert run_args.max_cases is None
+    assert oracle_args.max_cases is None
+
+
+def test_prepare_records_registered_source_checksum(
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setattr(generation_cli, "load_qasper_cases", lambda *args, **kwargs: [])
+    args = Namespace(
+        split="validation",
+        cache_dir=None,
+        revision=generation_cli.QASPER_PARQUET_REVISION,
+        limit_papers=None,
+        output_dir=str(tmp_path),
+    )
+
+    assert generation_cli._prepare(args) == 0
+
+    manifest = json.loads((tmp_path / "validation.manifest.json").read_text())
+    assert manifest["schema_version"] == 2
+    assert manifest["source_parquet_sha256"] == (
+        "089781b91c337d348dd9e8b57cc8adc100ed2d9cab84a6127402bcccf1559222"
+    )
 
 
 def test_generation_commands_accept_openai_provider_configuration():

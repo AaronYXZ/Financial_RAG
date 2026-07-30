@@ -16,6 +16,11 @@ QASPER_PARQUET_URL = (
     "https://huggingface.co/datasets/allenai/qasper/resolve/"
     "{revision}/qasper/{split}/0000.parquet"
 )
+QASPER_PARQUET_SHA256S = {
+    QASPER_PARQUET_REVISION: {
+        "validation": "089781b91c337d348dd9e8b57cc8adc100ed2d9cab84a6127402bcccf1559222",
+    }
+}
 
 
 @dataclass(frozen=True)
@@ -273,6 +278,15 @@ def qasper_parquet_url(split: str, revision: str = QASPER_PARQUET_REVISION) -> s
         revision=quote(revision, safe=""),
         split=split,
     )
+
+
+def qasper_parquet_sha256(
+    split: str,
+    revision: str = QASPER_PARQUET_REVISION,
+) -> str | None:
+    """Return the verified checksum registered for an immutable source split."""
+
+    return QASPER_PARQUET_SHA256S.get(revision, {}).get(split)
 
 
 def load_qasper_cases(

@@ -30,6 +30,7 @@ from .generation_data import (
     QASPER_VERSION,
     generation_case_from_dict,
     load_qasper_cases,
+    qasper_parquet_sha256,
     qasper_parquet_url,
 )
 
@@ -72,11 +73,15 @@ def _prepare(args: argparse.Namespace) -> int:
         for reference in case.references
     )
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "dataset": QASPER_DATASET,
         "dataset_config": "qasper",
         "dataset_revision": args.revision,
         "dataset_version": QASPER_VERSION,
+        "source_parquet_sha256": qasper_parquet_sha256(
+            args.split,
+            args.revision,
+        ),
         "source_parquet_url": qasper_parquet_url(args.split, args.revision),
         "split": args.split,
         "limit_papers": args.limit_papers,
@@ -342,6 +347,13 @@ def _add_generation_arguments(
     command.add_argument("--max-output-tokens", type=int, default=1024)
     if include_max_cases:
         command.add_argument("--max-cases", type=int, default=25)
+        command.add_argument(
+            "--all-cases",
+            action="store_const",
+            const=None,
+            dest="max_cases",
+            help="Run every eligible case instead of the 25-case smoke default.",
+        )
     command.add_argument("--temperature", type=float, default=0.0)
     command.add_argument("--timeout", type=float, default=300.0)
     command.add_argument("--retries", type=int, default=1)
@@ -449,6 +461,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-context-tokens", type=int, default=32_768)
     run.add_argument("--max-output-tokens", type=int, default=1024)
     run.add_argument("--max-cases", type=int, default=25)
+    run.add_argument(
+        "--all-cases",
+        action="store_const",
+        const=None,
+        dest="max_cases",
+        help="Run every eligible case instead of the 25-case smoke default.",
+    )
     run.add_argument("--temperature", type=float, default=0.0)
     run.add_argument("--timeout", type=float, default=300.0)
     run.add_argument("--retries", type=int, default=1)

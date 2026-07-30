@@ -1,0 +1,141 @@
+{
+  "context_tracks": {
+    "complete-paper": {
+      "case_filter": "exclude_ambiguous_answerability",
+      "passage_policy": "all_normalized_paper_passages_in_document_order"
+    },
+    "oracle-evidence": {
+      "case_filter": "answerable_only",
+      "passage_policy": "ordered_union_of_resolved_annotated_evidence"
+    },
+    "retrieved-context": {
+      "case_filter": "ordered_ids_from_source_eligibility_manifest",
+      "passage_policy": "ordered_top_k_from_checksummed_frozen_context_manifest"
+    }
+  },
+  "data": {
+    "cases": {
+      "case_count": 1005,
+      "path": "data/generation/qasper-v1/validation.cases.jsonl",
+      "sha256": "e0172f79d2b17435b5c8c0aaa1ce9db76de0f6619772979a85f5a8c926f38c93"
+    },
+    "dataset": "allenai/qasper",
+    "dataset_config": "qasper",
+    "dataset_revision": "06806e4608976fc2fac0a090ac425d5b2b29caf4",
+    "dataset_version": "0.3.0",
+    "source_parquet": {
+      "path": "qasper/validation/0000.parquet",
+      "sha256": "089781b91c337d348dd9e8b57cc8adc100ed2d9cab84a6127402bcccf1559222",
+      "size_bytes": 4749127
+    },
+    "split": "validation",
+    "train_split_decision": "deferred_while_prompt_v3_is_frozen"
+  },
+  "frozen_on": "2026-07-29",
+  "generation": {
+    "common": {
+      "format_repair_retries": 0,
+      "max_cases": null,
+      "max_context_tokens": 32768,
+      "max_output_tokens": 1024,
+      "request_retries": 1,
+      "resume": true,
+      "timeout_seconds": 300.0
+    },
+    "local": {
+      "model_id": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+      "provider": "local_openai_compatible",
+      "temperature": 0.0,
+      "tokenizer_id": "Qwen/Qwen3-4B-Instruct-2507"
+    },
+    "openai": {
+      "model_id": "gpt-5",
+      "provider": "openai_responses",
+      "reasoning_effort": "low",
+      "response_format": "strict_json_schema",
+      "store": false
+    }
+  },
+  "integrity_gates": {
+    "allow_test_inspection_before_threshold_freeze": false,
+    "case_checksum_mismatch_allowed": false,
+    "context_manifest_checksum_mismatch_allowed": false,
+    "matched_comparison_requires_identical_ordered_case_ids": true,
+    "missing_or_duplicate_case_ids_allowed": false,
+    "source_checksum_mismatch_allowed": false
+  },
+  "metrics": {
+    "bootstrap": {
+      "cluster": "paper_id",
+      "confidence_level": 0.95,
+      "method": "two_sided_percentile",
+      "resamples": 10000,
+      "seed": 42
+    },
+    "calibration": {
+      "bin_count": 10,
+      "binning": "equal_width",
+      "quality_target": "abstention_correctness_or_answer_token_f1"
+    },
+    "deterministic_primary": [
+      "answer_token_f1",
+      "citation_precision",
+      "citation_recall",
+      "citation_f1",
+      "valid_response_rate"
+    ],
+    "deterministic_secondary": [
+      "normalized_exact_match",
+      "citation_validity_rate",
+      "answerability_accuracy",
+      "abstention_precision",
+      "abstention_recall",
+      "abstention_f1",
+      "false_answer_rate",
+      "false_abstention_rate",
+      "expected_calibration_error",
+      "area_under_risk_coverage_curve",
+      "latency_p50_p95_p99",
+      "token_usage",
+      "retry_rate",
+      "error_rates"
+    ]
+  },
+  "performance_thresholds": {
+    "freeze_requirement": "full_validation_baseline_plus_explicit_product_requirements",
+    "reason": "The available 25-case runs are smoke baselines and cannot justify release gates.",
+    "status": "pending"
+  },
+  "prompt": {
+    "response_contract_sha256": "ccd8cb2ccc7863b130c2c2379f34335a112440c8ca00748f604eaaf4a9df064b",
+    "system_prompt_sha256": "530588406c2a097d9b08698d2e8ecbb1c653ba319a4fb75534414f69b01d8ba3",
+    "version": "qasper-generation-v3"
+  },
+  "protocol_id": "qasper-generation-validation-v1",
+  "reportable_run_rules": {
+    "change_one_factor_at_a_time": true,
+    "full_validation_max_cases": null,
+    "primary_attempt": "first_response",
+    "provider_alias_update_creates_new_configuration": true,
+    "require_explicit_track_specific_run_id": true
+  },
+  "retrieval": {
+    "candidate_k_policy": "max_top_k_times_4_or_100",
+    "dense_batch_size": 32,
+    "dense_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "hybrid_rrf_k": 60,
+    "retrieval_scope": "paper",
+    "top_k": 5
+  },
+  "schema_version": 1,
+  "status": "protocol_frozen_performance_thresholds_pending",
+  "test_policy": {
+    "allowed_runs": 1,
+    "inspect_only_after": [
+      "full_validation_baselines_complete",
+      "performance_thresholds_frozen",
+      "semantic_evaluator_human_audit_complete"
+    ],
+    "split": "test"
+  }
+}

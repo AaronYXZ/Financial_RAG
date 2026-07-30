@@ -548,10 +548,23 @@ Pin and record all of the following in each run manifest:
 - dataset name and configuration
 - dataset revision or immutable snapshot identifier
 - QASPER builder version
+- source Parquet SHA-256
 - split
 - normalized case-file SHA-256
 - loader source revision
 - schema version
+
+The registered validation source is:
+
+- immutable revision: `06806e4608976fc2fac0a090ac425d5b2b29caf4`
+- file: `qasper/validation/0000.parquet`
+- byte size: `4,749,127`
+- SHA-256:
+  `089781b91c337d348dd9e8b57cc8adc100ed2d9cab84a6127402bcccf1559222`
+
+The complete normalized validation file contains 1,005 cases and has SHA-256
+`e0172f79d2b17435b5c8c0aaa1ce9db76de0f6619772979a85f5a8c926f38c93`.
+The machine-readable validation protocol is `generation_protocol_v1.json`.
 
 The Hugging Face paper-level split sizes are 888 train, 281 validation, and 416
 test rows. Do not repartition papers or allow the same paper to cross splits.
@@ -1027,9 +1040,10 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
 - [x] Implement deterministic prompt rendering, hashing, and strict response parsing.
 - [x] Add unit tests for loader, context selection, and response validation.
 - [x] Pin the QASPER Parquet export to an immutable repository commit.
-- [ ] Record or verify the downloaded source Parquet checksum.
+- [x] Record and verify the downloaded validation source Parquet checksum.
 - [x] Download and normalize the complete validation split.
-- [ ] Download and normalize the train split for prompt development.
+- [x] Decide whether the train split is needed. It is deferred because prompt
+  contract v3 is frozen and no prompt-development work currently requires it.
 - [x] Implement Track A and Track B deterministic case selection.
 - [x] Implement shared context-window eligibility before model execution.
 - [x] Freeze eligible case IDs as the denominator for each run configuration.
@@ -1043,6 +1057,8 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
 - [x] Implement paper-clustered bootstrap confidence intervals.
 - [ ] Add the blinded claim-support and completeness evaluator.
 - [ ] Complete the stratified human-audit workflow.
-- [ ] Run validation baselines and freeze thresholds.
+- [ ] Run full validation baselines and freeze product-derived quality,
+  latency, and cost thresholds. The existing 25-case runs are smoke baselines
+  and must not be used to invent release thresholds.
 - [ ] Run the held-out test comparison once.
 - [ ] Complete error analysis and publish the Phase 3 comparison report.

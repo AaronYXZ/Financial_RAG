@@ -98,6 +98,12 @@ Remove `--limit-papers` to normalize the complete validation split. The command
 creates one case per QASPER question, preserves all reference annotations, maps
 annotated evidence to stable passage IDs, and writes a checksummed manifest.
 Downloaded data and normalized cases remain under the ignored `data/` directory.
+The pinned validation Parquet has SHA-256
+`089781b91c337d348dd9e8b57cc8adc100ed2d9cab84a6127402bcccf1559222`.
+The normalized 1,005-case validation file has SHA-256
+`e0172f79d2b17435b5c8c0aaa1ce9db76de0f6619772979a85f5a8c926f38c93`.
+The frozen machine-readable validation policy is in
+`generation_protocol_v1.json`.
 
 To use the OpenAI API provider, install its optional dependencies:
 
@@ -371,11 +377,16 @@ failure:
 ```bash
 rag-generation generate-oracle \
   --cases-file data/generation/qasper-v1/validation.cases.jsonl \
-  --output-file results/generation/qasper-v1/predictions/qwen3-4b-oracle-v2.jsonl \
-  --max-cases 25 \
+  --output-file results/generation/qasper-v1/predictions/qwen3-4b-oracle-validation-v1.jsonl \
+  --all-cases \
   --max-context-tokens 32768 \
-  --max-output-tokens 1024
+  --max-output-tokens 1024 \
+  --no-resume
 ```
+
+Omit `--all-cases` for the default 25-case smoke run.
+Use a new run ID for the full-validation output. Do not reuse a 25-case smoke
+sidecar because its frozen `max_cases` value is intentionally incompatible.
 
 Use `generate-retrieved` to replay a previously frozen context manifest. This
 task does not invoke retrieval, so different generators receive identical

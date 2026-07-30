@@ -1,6 +1,8 @@
 from rag_eval.generation_data import (
+    QASPER_PARQUET_REVISION,
     generation_case_from_dict,
     normalize_qasper_row,
+    qasper_parquet_sha256,
     select_passages,
 )
 
@@ -87,3 +89,12 @@ def test_unmatched_evidence_is_reported_not_silently_discarded():
 
     assert case.oracle_passage_ids == ()
     assert case.references[0].unresolved_evidence == ("Missing evidence",)
+
+
+def test_verified_qasper_source_checksum_is_revision_and_split_specific():
+    assert qasper_parquet_sha256("validation") == (
+        "089781b91c337d348dd9e8b57cc8adc100ed2d9cab84a6127402bcccf1559222"
+    )
+    assert qasper_parquet_sha256("train") is None
+    assert qasper_parquet_sha256("validation", "different-revision") is None
+    assert len(QASPER_PARQUET_REVISION) == 40

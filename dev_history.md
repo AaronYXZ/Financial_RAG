@@ -1,5 +1,29 @@
 # Development History
 
+## 2026-07-29. Validation data provenance and protocol freeze
+
+### Implemented
+
+- Verified the cached immutable QASPER validation Parquet against SHA-256
+  `089781b91c337d348dd9e8b57cc8adc100ed2d9cab84a6127402bcccf1559222`.
+- Registered the source checksum in code and normalized-data manifests.
+- Confirmed that the complete normalized validation split contains 1,005 cases
+  with SHA-256
+  `e0172f79d2b17435b5c8c0aaa1ce9db76de0f6619772979a85f5a8c926f38c93`.
+- Added `generation_protocol_v1.json` to freeze the validation data, prompt,
+  context, generation, retrieval, metric, and held-out-test policies.
+- Added `--all-cases` to the oracle and lower-level fixed-context commands so
+  full validation runs do not depend on an implicit numeric sentinel.
+- Deferred the train split because prompt contract v3 is frozen and no active
+  prompt-development task requires it.
+
+### Threshold boundary
+
+The existing 25-case results are smoke baselines. They are not sufficient for
+numeric release thresholds. Quality, latency, and cost gates remain pending a
+full validation run and explicit product requirements. Integrity gates and the
+rule against inspecting held-out test outputs before the freeze are mandatory.
+
 ## 2026-07-27. OpenAI Responses API generation provider
 
 ### Implemented
