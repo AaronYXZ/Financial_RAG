@@ -139,8 +139,9 @@ def _write_eligibility_manifest(
         "eligible_case_ids": [item.case.case_id for item in eligible],
         "excluded_counts": exclusions,
     }
-    if getattr(adapter, "provider", None) == "openai":
-        payload["provider"] = "openai"
+    provider = getattr(adapter, "provider", None)
+    if provider is not None:
+        payload["provider"] = provider
     if context_manifest_sha256 is not None:
         payload["context_manifest_sha256"] = context_manifest_sha256
     if path.exists() and not overwrite:

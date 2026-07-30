@@ -9,7 +9,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Sequence
 
-from .generation_adapter import OpenAICompatibleAdapter, OpenAIResponsesAdapter
+from .generation_adapter import (
+    OpenAICompatibleAdapter,
+    OpenAIResponsesAdapter,
+    OpenRouterChatAdapter,
+)
 from .generation_cost import estimate_openai_cost
 from .generation_comparison import (
     compare_evaluated_runs,
@@ -43,6 +47,7 @@ from .generation_data import (
 
 LOCAL_MODEL_ID = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
 OPENAI_MODEL_ID = "gpt-5"
+OPENROUTER_MODEL_ID = "openai/gpt-5"
 OPENAI_MODEL_IDS = ("gpt-5", "gpt-5.6-sol", "gpt-5.6-luna")
 OPENAI_REASONING_EFFORTS = {
     "gpt-5": ("minimal", "low", "medium", "high"),
@@ -133,6 +138,19 @@ def _execute_generation(
             api_key_env=args.openai_api_key_env,
             max_output_tokens=args.max_output_tokens,
             reasoning_effort=args.openai_reasoning_effort,
+            timeout_seconds=args.timeout,
+            runtime_retries=args.retries,
+        )
+    elif args.provider == "openrouter":
+        adapter = OpenRouterChatAdapter(
+            model_id=args.openrouter_model,
+            env_file=Path(args.env_file),
+            api_key_env=args.openrouter_api_key_env,
+            base_url=args.openrouter_base_url,
+            http_referer=args.openrouter_http_referer,
+            app_title=args.openrouter_app_title,
+            max_output_tokens=args.max_output_tokens,
+            temperature=args.temperature,
             timeout_seconds=args.timeout,
             runtime_retries=args.retries,
         )
@@ -441,7 +459,7 @@ def _add_generation_arguments(
 def _add_provider_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument(
         "--provider",
-        choices=("local", "openai"),
+        choices=("local", "openai", "openrouter"),
         default="local",
     )
     command.add_argument(
@@ -453,7 +471,7 @@ def _add_provider_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument(
         "--env-file",
         default=".env",
-        help="Environment file containing the OpenAI API key.",
+        help="Environment file containing provider API keys.",
     )
     command.add_argument(
         "--openai-api-key-env",
@@ -464,6 +482,33 @@ def _add_provider_arguments(command: argparse.ArgumentParser) -> None:
         "--openai-reasoning-effort",
         choices=("none", "minimal", "low", "medium", "high", "xhigh", "max"),
         default="low",
+    )
+    command.add_argument(
+        "--openrouter-model",
+        default=OPENROUTER_MODEL_ID,
+        help=(
+            "OpenRouter model slug used when --provider openrouter is selected. "
+            "Any model with structured-output support may be specified."
+        ),
+    )
+    command.add_argument(
+        "--openrouter-api-key-env",
+        default="OPENROUTER_API_KEY",
+        help="Environment variable that contains the OpenRouter API key.",
+    )
+    command.add_argument(
+        "--openrouter-base-url",
+        default="https://openrouter.ai/api/v1",
+        help="OpenRouter-compatible API base URL.",
+    )
+    command.add_argument(
+        "--openrouter-http-referer",
+        help="Optional site URL sent in OpenRouter's HTTP-Referer attribution header.",
+    )
+    command.add_argument(
+        "--openrouter-app-title",
+        default="Project Local RAG",
+        help="Optional app name sent in OpenRouter's X-OpenRouter-Title header.",
     )
 
 

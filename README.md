@@ -120,6 +120,39 @@ OPENAI_API_KEY=your-api-key
 
 Do not add the key to commands, source files, logs, or committed configuration.
 
+To use OpenRouter, install its optional dependencies and set its key in the same
+ignored `.env` file:
+
+```bash
+pip install -e ".[generation,openrouter]"
+```
+
+```dotenv
+OPENROUTER_API_KEY=your-openrouter-api-key
+```
+
+OpenRouter accepts a free-form model slug through `--openrouter-model`. The
+benchmark requests strict JSON-schema output and requires OpenRouter to select an
+endpoint that supports it. This preserves the response contract when models are
+changed. For example:
+
+```bash
+rag-generation generate-retrieved \
+  --provider openrouter \
+  --openrouter-model anthropic/claude-sonnet-4.5 \
+  --env-file .env \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --context-manifest data/generation/qasper-v1/retrieval/hybrid-minilm-paper-top5-validation-v1.json \
+  --output-file results/generation/qasper-v1/predictions/claude-sonnet-4.5-openrouter.jsonl \
+  --max-cases 25
+```
+
+The optional `--openrouter-http-referer` and `--openrouter-app-title` flags set
+OpenRouter attribution headers. The app title defaults to `Project Local RAG`.
+OpenRouter token counting before a request uses a stable `o200k_base` estimate
+because model slugs can span tokenizer families. Each completed result records
+the authoritative prompt and completion token counts returned by OpenRouter.
+
 The generation experiment runner has three diagnostic tracks:
 
 - `oracle-evidence` is the primary controlled generator benchmark.

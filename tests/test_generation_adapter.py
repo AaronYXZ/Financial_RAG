@@ -8,6 +8,7 @@ from rag_eval.generation_adapter import (
     GenerationRequestError,
     OpenAICompatibleAdapter,
     OpenAIResponsesAdapter,
+    OpenRouterChatAdapter,
 )
 
 
@@ -159,3 +160,70 @@ def test_openai_responses_adapter_records_terminal_attempt_count():
         make_openai_adapter(FakeResponses()).generate("system", "user")
 
     assert caught.value.attempts == 2
+
+
+def make_openrouter_adapter() -> OpenRouterChatAdapter:
+    adapter = OpenRouterChatAdapter.__new__(OpenRouterChatAdapter)
+    adapter.model_id = "anthropic/claude-sonnet-4.5"
+    adapter.base_url = "https://openrouter.ai/api/v1"
+    adapter.api_key = "test-key"
+    adapter.http_referer = "https://example.com"
+    adapter.app_title = "Local RAG Test"
+    adapter.max_output_tokens = 512
+    adapter.temperature = 0.0
+    adapter.timeout_seconds = 300.0
+    adapter.runtime_retries = 1
+    return adapter
+
+
+def test_openrouter_adapter_counts_prompt_tokens_with_framing_reserve():
+    class FakeEncoding:
+        def encode(self, text):
+            return text.split()
+
+    adapter = make_openrouter_adapter()
+    adapter.encoding = FakeEncoding()
+
+    assert adapter.count_tokens("two words", "three more words") == 21
+
+
+def test_openrouter_adapter_sends_selected_model_and_strict_schema(monkeypatch):
+    calls = []
+
+    def fake_urlopen(request, timeout):
+        calls.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    result = make_openrouter_adapter().generate("system", "user")
+
+    request = calls[0][0]
+    payload = json.loads(request.data)
+    headers = {key.lower(): value for key, value in request.header_items()}
+    assert request.full_url == "https://openrouter.ai/api/v1/chat/completions"
+    assert headers["authorization"] == "Bearer test-key"
+    assert headers["http-referer"] == "https://example.com"
+    assert headers["x-openrouter-title"] == "Local RAG Test"
+    assert payload["model"] == "anthropic/claude-sonnet-4.5"
+    assert payload["max_completion_tokens"] == 512
+    assert payload["response_format"]["type"] == "json_schema"
+    assert payload["response_format"]["json_schema"]["strict"] is True
+    assert payload["provider"]["require_parameters"] is True
+    assert result.input_tokens == 10
+    assert result.output_tokens == 2
+
+
+def test_openrouter_adapter_retries_transient_transport_errors(monkeypatch):
+    calls = []
+
+    def fake_urlopen(request, timeout):
+        calls.append(request)
+        if len(calls) == 1:
+            raise urllib.error.URLError("temporary")
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    result = make_openrouter_adapter().generate("system", "user")
+
+    assert result.attempts == 2

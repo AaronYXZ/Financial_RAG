@@ -1,4 +1,4 @@
-"""Generation adapters for local OpenAI-compatible servers and OpenAI."""
+"""Generation adapters for local, OpenAI, and OpenRouter model providers."""
 
 from __future__ import annotations
 
@@ -276,5 +276,186 @@ class OpenAIResponsesAdapter:
             latency_seconds=time.perf_counter() - started,
             input_tokens=self._usage_value(usage, "input_tokens"),
             output_tokens=self._usage_value(usage, "output_tokens"),
+            attempts=attempt + 1,
+        )
+
+
+class OpenRouterChatAdapter:
+    """Call OpenRouter chat completions with a user-selected model slug."""
+
+    provider = "openrouter"
+
+    def __init__(
+        self,
+        *,
+        model_id: str,
+        env_file: Path = Path(".env"),
+        api_key_env: str = "OPENROUTER_API_KEY",
+        base_url: str = "https://openrouter.ai/api/v1",
+        http_referer: str | None = None,
+        app_title: str | None = None,
+        max_output_tokens: int = 1024,
+        temperature: float = 0.0,
+        timeout_seconds: float = 300.0,
+        runtime_retries: int = 1,
+    ) -> None:
+        if runtime_retries < 0:
+            raise ValueError("runtime_retries cannot be negative")
+        if not model_id.strip():
+            raise ValueError("model_id cannot be empty")
+        try:
+            import tiktoken
+            from dotenv import load_dotenv
+        except ImportError as exc:
+            raise RuntimeError(
+                "OpenRouter generation requires the openrouter extra: "
+                "pip install -e '.[generation,openrouter]'"
+            ) from exc
+
+        load_dotenv(dotenv_path=env_file, override=False)
+        api_key = os.environ.get(api_key_env)
+        if not api_key:
+            raise RuntimeError(
+                f"{api_key_env} is not set. Add it to {env_file} or the environment."
+            )
+
+        self.model_id = model_id
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.http_referer = http_referer
+        self.app_title = app_title
+        self.max_output_tokens = max_output_tokens
+        self.temperature = temperature
+        self.timeout_seconds = timeout_seconds
+        self.runtime_retries = runtime_retries
+        self.encoding = tiktoken.get_encoding("o200k_base")
+
+    def count_tokens(self, system_prompt: str, user_prompt: str) -> int:
+        # OpenRouter spans tokenizer families. This is a stable preflight estimate;
+        # authoritative provider token counts are recorded from response usage.
+        return (
+            len(self.encoding.encode(system_prompt))
+            + len(self.encoding.encode(user_prompt))
+            + 16
+        )
+
+    def _headers(self) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        if self.http_referer:
+            headers["HTTP-Referer"] = self.http_referer
+        if self.app_title:
+            headers["X-OpenRouter-Title"] = self.app_title
+        return headers
+
+    @staticmethod
+    def _error_detail(exc: urllib.error.HTTPError) -> str:
+        try:
+            payload = json.loads(exc.read().decode("utf-8"))
+            error = payload.get("error")
+            if isinstance(error, Mapping):
+                message = error.get("message")
+                if message:
+                    return str(message)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+        return str(exc)
+
+    @staticmethod
+    def _response_text(response_payload: Mapping[str, Any]) -> str:
+        try:
+            content = response_payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("OpenRouter returned an unexpected response") from exc
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts = [
+                item.get("text", "")
+                for item in content
+                if isinstance(item, Mapping) and item.get("type") == "text"
+            ]
+            return "".join(str(part) for part in parts).strip()
+        return ""
+
+    def generate(self, system_prompt: str, user_prompt: str) -> AdapterResult:
+        payload = {
+            "model": self.model_id,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "max_completion_tokens": self.max_output_tokens,
+            "temperature": self.temperature,
+            "stream": False,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "generation_response",
+                    "strict": True,
+                    "schema": GENERATION_RESPONSE_SCHEMA,
+                },
+            },
+            "provider": {"require_parameters": True},
+        }
+        request = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers=self._headers(),
+            method="POST",
+        )
+        started = time.perf_counter()
+        response_payload: Mapping[str, Any] | None = None
+        last_error: Exception | None = None
+        for attempt in range(self.runtime_retries + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                    decoded = json.loads(response.read().decode("utf-8"))
+                if not isinstance(decoded, Mapping):
+                    raise RuntimeError("OpenRouter returned a non-object response")
+                response_payload = decoded
+                break
+            except urllib.error.HTTPError as exc:
+                last_error = exc
+                detail = self._error_detail(exc)
+                retryable = exc.code in {408, 429, 500, 502, 503, 504}
+                if not retryable or attempt == self.runtime_retries:
+                    raise GenerationRequestError(
+                        f"OpenRouter generation request failed ({exc.code}): {detail}",
+                        attempts=attempt + 1,
+                    ) from exc
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                last_error = exc
+                if attempt == self.runtime_retries:
+                    raise GenerationRequestError(
+                        f"OpenRouter generation request failed: {exc}",
+                        attempts=attempt + 1,
+                    ) from exc
+        if response_payload is None:
+            raise GenerationRequestError(
+                f"OpenRouter generation request failed: {last_error}",
+                attempts=self.runtime_retries + 1,
+            )
+
+        text = self._response_text(response_payload)
+        if not text:
+            raise RuntimeError("OpenRouter returned no output text")
+        usage = response_payload.get("usage")
+        usage = usage if isinstance(usage, Mapping) else {}
+        return AdapterResult(
+            text=text,
+            latency_seconds=time.perf_counter() - started,
+            input_tokens=(
+                int(usage["prompt_tokens"])
+                if isinstance(usage.get("prompt_tokens"), int)
+                else None
+            ),
+            output_tokens=(
+                int(usage["completion_tokens"])
+                if isinstance(usage.get("completion_tokens"), int)
+                else None
+            ),
             attempts=attempt + 1,
         )

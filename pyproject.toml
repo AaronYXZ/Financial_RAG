@@ -30,6 +30,10 @@ openai = [
     "python-dotenv>=1.0,<2",
     "tiktoken>=0.9,<1",
 ]
+openrouter = [
+    "python-dotenv>=1.0,<2",
+    "tiktoken>=0.9,<1",
+]
 dev = [
     "pytest>=8.0",
 ]

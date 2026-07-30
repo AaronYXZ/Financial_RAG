@@ -251,6 +251,24 @@ def test_runner_records_openai_provider_without_changing_run_identity(tmp_path: 
     assert manifest["model_id"] == "gpt-test"
 
 
+def test_runner_records_any_named_provider_in_eligibility_manifest(tmp_path: Path):
+    adapter = FakeOpenAIAdapter()
+    adapter.provider = "openrouter"
+    output = tmp_path / "openrouter.jsonl"
+
+    run_generation_cases(
+        [CASE],
+        adapter=adapter,
+        track="oracle-evidence",
+        output_file=output,
+    )
+
+    row = json.loads(output.read_text())
+    manifest = json.loads(eligibility_manifest_path(output).read_text())
+    assert row["provider"] == "openrouter"
+    assert manifest["provider"] == "openrouter"
+
+
 def test_oracle_runner_excludes_answerable_case_without_resolved_evidence(
     tmp_path: Path,
 ):

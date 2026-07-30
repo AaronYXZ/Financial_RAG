@@ -73,6 +73,31 @@ def test_generation_commands_accept_openai_provider_configuration():
     assert args.openai_reasoning_effort == "low"
 
 
+def test_generation_commands_accept_openrouter_model_selection():
+    args = build_parser().parse_args(
+        [
+            "generate-retrieved",
+            "--provider",
+            "openrouter",
+            "--openrouter-model",
+            "google/gemini-2.5-pro",
+            "--openrouter-http-referer",
+            "https://example.com",
+            "--openrouter-app-title",
+            "RAG Benchmark",
+            "--context-manifest",
+            "frozen.json",
+        ]
+    )
+
+    assert args.provider == "openrouter"
+    assert args.openrouter_model == "google/gemini-2.5-pro"
+    assert args.openrouter_api_key_env == "OPENROUTER_API_KEY"
+    assert args.openrouter_base_url == "https://openrouter.ai/api/v1"
+    assert args.openrouter_http_referer == "https://example.com"
+    assert args.openrouter_app_title == "RAG Benchmark"
+
+
 def test_openai_model_defaults_and_choices_are_explicit():
     parser = build_parser()
     default_args = parser.parse_args(["generate-oracle", "--provider", "openai"])
