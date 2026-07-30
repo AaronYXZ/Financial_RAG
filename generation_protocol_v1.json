@@ -79,6 +79,9 @@
     },
     "deterministic_primary": [
       "answer_token_f1",
+      "evidence_hit_rate",
+      "evidence_best_reference_recall",
+      "evidence_complete_reference_set_rate",
       "citation_precision",
       "citation_recall",
       "citation_f1",

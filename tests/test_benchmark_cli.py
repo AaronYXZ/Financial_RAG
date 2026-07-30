@@ -9,3 +9,10 @@ def test_benchmark_cli_defaults_to_scidocs_matrix():
     assert args.chunk_size == 256
     assert args.chunk_overlap == 32
     assert args.repetitions == 3
+
+
+def test_benchmark_cli_can_select_whole_document_control_only():
+    args = build_parser().parse_args(["--whole-document-only"])
+
+    assert args.whole_document_only is True
+    assert args.whole_document_control is False

@@ -163,6 +163,25 @@ def test_join_uses_frozen_denominator_last_retry_and_missing_prediction():
     assert reliability["total_tokens"]["sum"] == 240.0
 
 
+def test_openai_cost_is_not_incorrectly_reported_as_zero():
+    row = prediction("q1", provider="openai")
+    record = EvaluationRecord(
+        case=make_case("q1", (make_reference("a1"),)),
+        track="oracle-evidence",
+        model_id="test-model",
+        status="valid",
+        prediction=row,
+        duplicate_prediction_count=0,
+    )
+
+    cost = reliability_and_efficiency([record])["estimated_cost_usd"]
+
+    assert cost["pricing_basis"] == (
+        "unavailable_without_frozen_provider_price_table"
+    )
+    assert cost["observed_total"] is None
+
+
 def test_answer_scoring_maximizes_over_references_and_scores_failures_zero():
     case = make_case(
         "q1",
@@ -263,6 +282,9 @@ def test_evaluator_writes_stage_zero_to_five_artifacts(tmp_path: Path):
     assert summary["prompt_version"] == "qasper-generation-v2"
     assert summary["answer_quality"]["token_f1"] == 1.0
     assert summary["citation_quality"]["citation_f1"] == 1.0
+    assert summary["failure_attribution"]["primary_outcome_counts"] == {
+        "correct_answer": 1
+    }
     assert summary["abstention_quality"]["applicable"] is False
     assert summary["confidence_and_calibration"]["applicable"] is False
     assert summary["paper_clustered_bootstrap"]["resamples"] == 10_000
@@ -304,6 +326,70 @@ def test_citation_scoring_selects_best_human_evidence_set():
     assert score["citation_recall"] == 1.0
     assert score["citation_f1"] == 1.0
     assert score["citation_reference_scores"][0]["citation_f1"] == pytest.approx(2 / 3)
+
+
+def test_retrieved_context_attributes_missing_complete_evidence_to_retrieval():
+    distractor = replace(
+        PASSAGE,
+        passage_id="paper::paragraph::0002",
+        text="Distractor",
+        order=1,
+    )
+    case = replace(
+        make_case("q1", (make_reference("a1"),)),
+        paper_passages=(PASSAGE, distractor),
+    )
+    row = prediction(
+        "q1",
+        track="retrieved-context",
+        context_passage_ids=[distractor.passage_id],
+        parsed_response={
+            "answer": "wrong",
+            "abstain": False,
+            "citations": [distractor.passage_id],
+            "confidence": 0.8,
+        },
+    )
+    score = score_answer_record(
+        EvaluationRecord(
+            case,
+            "retrieved-context",
+            "test-model",
+            "valid",
+            row,
+            0,
+        )
+    )
+
+    assert score["evidence_hit"] is False
+    assert score["best_reference_evidence_recall"] == 0.0
+    assert score["best_reference_evidence_mrr"] == 0.0
+    assert score["best_reference_evidence_ndcg"] == 0.0
+    assert score["complete_reference_evidence_available"] is False
+    assert score["failure_attribution"] == "retrieval_miss"
+
+
+def test_retrieved_context_does_not_attribute_unresolved_gold_evidence():
+    case = make_case(
+        "q1",
+        (replace(make_reference("a1"), evidence_ids=()),),
+    )
+    row = prediction("q1", track="retrieved-context")
+    score = score_answer_record(
+        EvaluationRecord(
+            case,
+            "retrieved-context",
+            "test-model",
+            "valid",
+            row,
+            0,
+        )
+    )
+
+    assert score["complete_reference_evidence_available"] is None
+    assert score["failure_attribution"] == (
+        "evidence_unavailable_for_attribution"
+    )
 
 
 def test_citation_aggregate_reports_abstention_invalid_and_missing_evidence():

@@ -226,6 +226,11 @@ def reliability_and_efficiency(records: Sequence[EvaluationRecord]) -> dict[str,
     ]
     denominator = eligible_count or 1
     attempted_denominator = len(attempted) or 1
+    providers = {
+        str(row.get("provider") or "local")
+        for row in predictions
+    }
+    openai_run = "openai" in providers
     return {
         "eligible_case_count": eligible_count,
         "attempted_case_count": len(attempted),
@@ -246,10 +251,14 @@ def reliability_and_efficiency(records: Sequence[EvaluationRecord]) -> dict[str,
         ),
         "total_tokens": numeric_summary(total_tokens),
         "estimated_cost_usd": {
-            "pricing_basis": "local_inference",
-            "observed_total": 0.0,
-            "per_attempted_case": 0.0,
-            "per_1000_attempted_cases": 0.0,
+            "pricing_basis": (
+                "unavailable_without_frozen_provider_price_table"
+                if openai_run
+                else "local_inference"
+            ),
+            "observed_total": None if openai_run else 0.0,
+            "per_attempted_case": None if openai_run else 0.0,
+            "per_1000_attempted_cases": None if openai_run else 0.0,
         },
     }
 
@@ -318,10 +327,12 @@ def score_answer_record(record: EvaluationRecord) -> dict[str, Any]:
         record,
         answer_token_f1=float(winning["token_f1"]),
     )
-    return {
+    evidence_score = score_evidence_availability(record)
+    result = {
         **citation_score,
         **abstention_score,
         **confidence_score,
+        **evidence_score,
         "case_id": record.case.case_id,
         "paper_id": record.case.paper_id,
         "track": record.track,
@@ -336,6 +347,202 @@ def score_answer_record(record: EvaluationRecord) -> dict[str, Any]:
         "winning_annotation_id": winning["annotation_id"],
         "winning_answer_type": winning["answer_type"],
         "reference_scores": reference_scores,
+    }
+    result["failure_attribution"] = classify_failure_attribution(
+        result,
+        track=record.track,
+    )
+    return result
+
+
+def score_evidence_availability(record: EvaluationRecord) -> dict[str, Any]:
+    """Measure deterministic gold-evidence availability in the supplied context."""
+
+    prediction = record.prediction or {}
+    raw_context_ids = prediction.get("context_passage_ids")
+    if isinstance(raw_context_ids, list):
+        context_ids = tuple(str(item) for item in raw_context_ids)
+    elif record.track == "oracle-evidence":
+        context_ids = record.case.oracle_passage_ids
+    elif record.track == "complete-paper":
+        context_ids = tuple(
+            passage.passage_id for passage in record.case.paper_passages
+        )
+    else:
+        context_ids = ()
+
+    reference_sets = [
+        set(reference.evidence_ids)
+        for reference in record.case.references
+        if not reference.unanswerable and reference.evidence_ids
+    ]
+    context_set = set(context_ids)
+    reference_scores = []
+    for reference_ids in reference_sets:
+        relevant_ranks = [
+            rank
+            for rank, passage_id in enumerate(context_ids, start=1)
+            if passage_id in reference_ids
+        ]
+        overlap = len(reference_ids & context_set)
+        dcg = sum(1.0 / math.log2(rank + 1) for rank in relevant_ranks)
+        ideal_count = min(len(reference_ids), len(context_ids))
+        ideal_dcg = sum(
+            1.0 / math.log2(rank + 1)
+            for rank in range(1, ideal_count + 1)
+        )
+        reference_scores.append(
+            {
+                "hit": bool(relevant_ranks),
+                "recall": overlap / len(reference_ids),
+                "precision": overlap / len(context_set) if context_set else 0.0,
+                "mrr": 1.0 / relevant_ranks[0] if relevant_ranks else 0.0,
+                "ndcg": dcg / ideal_dcg if ideal_dcg else 0.0,
+                "complete": overlap == len(reference_ids),
+            }
+        )
+    winning = (
+        max(
+            reference_scores,
+            key=lambda item: (
+                item["complete"],
+                item["recall"],
+                item["ndcg"],
+                item["precision"],
+            ),
+        )
+        if reference_scores
+        else None
+    )
+    return {
+        "context_passage_count": len(context_ids),
+        "reference_evidence_set_count": len(reference_sets),
+        "evidence_hit": winning["hit"] if winning else None,
+        "best_reference_evidence_recall": winning["recall"] if winning else None,
+        "best_reference_evidence_precision": (
+            winning["precision"] if winning else None
+        ),
+        "best_reference_evidence_mrr": winning["mrr"] if winning else None,
+        "best_reference_evidence_ndcg": winning["ndcg"] if winning else None,
+        "complete_reference_evidence_available": (
+            winning["complete"] if winning else None
+        ),
+    }
+
+
+def classify_failure_attribution(
+    per_case: Mapping[str, Any],
+    *,
+    track: str,
+) -> str:
+    """Assign one deterministic primary outcome without semantic judging."""
+
+    status = str(per_case["status"])
+    if status in {"request_error", "timeout", "missing_prediction"}:
+        return "request_failure"
+    if status == "invalid_citation":
+        return "citation_failure"
+    if status != "valid":
+        return "format_failure"
+
+    answerability = per_case["answerability"]
+    outcome = per_case["abstention_outcome"]
+    if answerability == "ambiguous":
+        return "ambiguous_answerability"
+    if answerability == "unanswerable":
+        return (
+            "correct_abstention"
+            if outcome == "correct_abstention"
+            else "false_answer"
+        )
+    if (
+        track == "retrieved-context"
+        and per_case["complete_reference_evidence_available"] is None
+    ):
+        return "evidence_unavailable_for_attribution"
+    if (
+        track == "retrieved-context"
+        and per_case["complete_reference_evidence_available"] is False
+    ):
+        return "retrieval_miss"
+    if outcome == "false_abstention":
+        return "false_abstention"
+    if float(per_case["answer_normalized_exact_match"]) < 1.0:
+        return "answer_failure_despite_sufficient_evidence"
+    if (
+        per_case["citation_valid"] is not True
+        or per_case["citation_f1"] is None
+        or float(per_case["citation_f1"]) < 1.0
+    ):
+        return "citation_failure"
+    return "correct_answer"
+
+
+def aggregate_failure_attribution(
+    per_case: Sequence[Mapping[str, Any]],
+    *,
+    track: str,
+) -> dict[str, Any]:
+    counts = Counter(str(item["failure_attribution"]) for item in per_case)
+    retrieval_noise_count = sum(
+        track == "retrieved-context"
+        and item["complete_reference_evidence_available"] is True
+        and item["best_reference_evidence_precision"] is not None
+        and float(item["best_reference_evidence_precision"]) < 1.0
+        for item in per_case
+    )
+    denominator = len(per_case) or 1
+    return {
+        "case_count": len(per_case),
+        "primary_outcome_counts": dict(sorted(counts.items())),
+        "primary_outcome_rates": {
+            label: count / denominator for label, count in sorted(counts.items())
+        },
+        "retrieval_noise_secondary_count": retrieval_noise_count,
+        "retrieval_noise_secondary_rate": retrieval_noise_count / denominator,
+        "correctness_rule": "normalized_exact_match_equals_1",
+        "sufficient_evidence_rule": "any_complete_reference_evidence_set_in_context",
+    }
+
+
+def aggregate_evidence_availability(
+    per_case: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    evaluable = [
+        item
+        for item in per_case
+        if item["complete_reference_evidence_available"] is not None
+    ]
+
+    def mean(field: str) -> float | None:
+        return (
+            sum(float(item[field]) for item in evaluable) / len(evaluable)
+            if evaluable
+            else None
+        )
+
+    return {
+        "case_count": len(per_case),
+        "evaluable_answerable_case_count": len(evaluable),
+        "hit_rate": (
+            sum(item["evidence_hit"] is True for item in evaluable)
+            / len(evaluable)
+            if evaluable
+            else None
+        ),
+        "best_reference_recall": mean("best_reference_evidence_recall"),
+        "best_reference_precision": mean("best_reference_evidence_precision"),
+        "best_reference_mrr": mean("best_reference_evidence_mrr"),
+        "best_reference_ndcg": mean("best_reference_evidence_ndcg"),
+        "complete_reference_set_rate": (
+            sum(
+                item["complete_reference_evidence_available"] is True
+                for item in evaluable
+            )
+            / len(evaluable)
+            if evaluable
+            else None
+        ),
     }
 
 
@@ -402,8 +609,13 @@ def evaluate_prediction_files(
         "reliability_and_efficiency": reliability_and_efficiency(records),
         "answer_quality": aggregate_answer_quality(per_case),
         "citation_quality": aggregate_citation_quality(per_case),
+        "evidence_availability": aggregate_evidence_availability(per_case),
         "abstention_quality": aggregate_abstention_quality(per_case, track=track),
         "confidence_and_calibration": aggregate_confidence_and_calibration(
+            per_case,
+            track=track,
+        ),
+        "failure_attribution": aggregate_failure_attribution(
             per_case,
             track=track,
         ),
@@ -901,14 +1113,24 @@ def aggregate_confidence_and_calibration(
     }
 
 
-def _bootstrap_point_estimates(
+def bootstrap_point_estimates(
     per_case: Sequence[Mapping[str, Any]],
     *,
     track: str,
 ) -> dict[str, float]:
     answer = aggregate_answer_quality(per_case)
     citation = aggregate_citation_quality(per_case)
+    evidence_evaluable = [
+        item
+        for item in per_case
+        if item.get("complete_reference_evidence_available") is not None
+    ]
     estimates: dict[str, float | None] = {
+        "reliability.valid_response_rate": (
+            sum(item.get("status") == "valid" for item in per_case) / len(per_case)
+            if per_case
+            else 0.0
+        ),
         "answer.token_f1": answer["token_f1"],
         "answer.normalized_exact_match": answer["normalized_exact_match"],
         "citation.precision": citation["citation_precision"],
@@ -918,6 +1140,57 @@ def _bootstrap_point_estimates(
         "citation.answered_with_citation_rate": citation[
             "answered_with_citation_rate"
         ],
+        "evidence.hit_rate": (
+            sum(item.get("evidence_hit") is True for item in evidence_evaluable)
+            / len(evidence_evaluable)
+            if evidence_evaluable
+            else None
+        ),
+        "evidence.best_reference_recall": (
+            sum(
+                float(item["best_reference_evidence_recall"])
+                for item in evidence_evaluable
+            )
+            / len(evidence_evaluable)
+            if evidence_evaluable
+            else None
+        ),
+        "evidence.best_reference_precision": (
+            sum(
+                float(item["best_reference_evidence_precision"])
+                for item in evidence_evaluable
+            )
+            / len(evidence_evaluable)
+            if evidence_evaluable
+            else None
+        ),
+        "evidence.best_reference_mrr": (
+            sum(
+                float(item["best_reference_evidence_mrr"])
+                for item in evidence_evaluable
+            )
+            / len(evidence_evaluable)
+            if evidence_evaluable
+            else None
+        ),
+        "evidence.best_reference_ndcg": (
+            sum(
+                float(item["best_reference_evidence_ndcg"])
+                for item in evidence_evaluable
+            )
+            / len(evidence_evaluable)
+            if evidence_evaluable
+            else None
+        ),
+        "evidence.complete_reference_set_rate": (
+            sum(
+                item.get("complete_reference_evidence_available") is True
+                for item in evidence_evaluable
+            )
+            / len(evidence_evaluable)
+            if evidence_evaluable
+            else None
+        ),
     }
 
     if track in ANSWERABILITY_TRACKS:
@@ -974,7 +1247,7 @@ def paper_clustered_bootstrap_intervals(
         by_paper[paper_id].append(item)
 
     paper_ids = sorted(by_paper)
-    point_estimates = _bootstrap_point_estimates(per_case, track=track)
+    point_estimates = bootstrap_point_estimates(per_case, track=track)
     samples: dict[str, list[float]] = {
         metric: [] for metric in point_estimates
     }
@@ -987,7 +1260,7 @@ def paper_clustered_bootstrap_intervals(
                 k=len(paper_ids),
             ):
                 sampled_rows.extend(by_paper[paper_id])
-            replicate = _bootstrap_point_estimates(sampled_rows, track=track)
+            replicate = bootstrap_point_estimates(sampled_rows, track=track)
             for metric in samples:
                 value = replicate.get(metric)
                 if value is not None:

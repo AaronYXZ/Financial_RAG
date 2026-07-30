@@ -1,5 +1,39 @@
 # Development History
 
+## 2026-07-29. Deterministic Stage 3 comparison and attribution
+
+### Implemented
+
+- Added deterministic evidence Hit, best-reference Recall, Precision, MRR,
+  NDCG, and complete-reference-set availability from supplied context IDs.
+- Added a per-case primary failure taxonomy and a secondary retrieval-noise
+  indicator.
+- Added paired paper-clustered bootstrap differences and candidate win
+  probabilities for matched evaluated runs.
+- Added ordered eligibility intersections for shared cross-model retrieval
+  manifests.
+- Added the full-corpus SciDocs whole-document BM25 diagnostic.
+- Corrected oracle eligibility so answerable cases without resolved evidence are
+  counted and excluded instead of terminating the run.
+- Corrected resume behavior so every persisted attempt is skipped, preventing
+  interrupted primary runs from silently retrying invalid responses.
+- Corrected OpenAI cost reporting so missing price tables produce unavailable
+  cost values instead of false zero-cost claims.
+
+### Full validation
+
+The frozen Qwen3-4B and GPT-5 oracle, complete-paper, and dense retrieved-context
+validation runs use prompt v3, a 32,768-token context limit, a 1,024-token output
+limit, and the complete deterministic eligible sets. Generated artifacts remain
+under ignored `data/` and `results/` directories.
+
+Five of six metric artifacts are complete. GPT-5 API quota exhaustion produced
+135 oracle, 267 retrieved-context, and 415 complete-paper request errors, so the
+GPT-5 quality comparisons are non-selectable. The Qwen3-4B complete-paper run has
+127 unique first attempts persisted and requires a macOS restart after MLX
+entered an uninterruptible GPU-driver state. See
+`stage3_deterministic_report.md`.
+
 ## 2026-07-29. Validation data provenance and protocol freeze
 
 ### Implemented

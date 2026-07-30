@@ -509,10 +509,11 @@ limits for the intended deployment environment.
 - [ ] Persist chunk manifests, rankings, winning chunks, and per-query traces.
 - [ ] Add p50, p95, and p99 latency plus build-time instrumentation.
 - [ ] Add peak-memory and index-size measurement.
-- [ ] Add paired bootstrap confidence intervals.
+- [ ] Add paired bootstrap confidence intervals for fixed-versus-recursive
+  retrieval differences.
 - [ ] Add the validation and unit tests in Section 12.
-- [ ] Run the diagnostic whole-document BM25 control.
-- [ ] Run the six pre-registered primary configurations.
+- [x] Run the diagnostic whole-document BM25 control.
+- [x] Run the six pre-registered primary configurations.
 - [ ] Run 128-token sensitivity analysis only if the 90 percent single-chunk rule
   is triggered.
 - [ ] Complete error analysis and write the Phase 2 comparison report.
@@ -1055,6 +1056,10 @@ validation baseline. Do not invent acceptance thresholds after viewing test data
 - [x] Implement basic Track B abstention and answerability metrics.
 - [x] Implement risk-coverage and calibration metrics.
 - [x] Implement paper-clustered bootstrap confidence intervals.
+- [x] Implement paired paper-clustered bootstrap differences for matched
+  generator comparisons.
+- [x] Implement deterministic evidence availability and primary
+  retrieval-versus-generation failure attribution.
 - [ ] Add the blinded claim-support and completeness evaluator.
 - [ ] Complete the stratified human-audit workflow.
 - [ ] Run full validation baselines and freeze product-derived quality,

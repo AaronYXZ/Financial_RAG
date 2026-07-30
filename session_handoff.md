@@ -227,7 +227,7 @@ The matched 25-case prompt comparison has also been run:
 The complete test suite passes:
 
 ```text
-79 passed
+94 passed
 ```
 
 Run validation with:
@@ -262,12 +262,19 @@ and `.idea/` are ignored.
 
 ### Stage 3. Complete deterministic comparisons
 
-1. Run full reportable Track A, Track B, and frozen retrieved-context
-   comparisons.
-2. Run the registered SciDocs retrieval configurations and whole-document BM25
-   control.
-3. Add paired paper-clustered bootstrap differences for matched systems.
-4. Report the complete retrieval-versus-generation failure taxonomy.
+1. [ ] Complete the final Qwen3-4B complete-paper validation run after restarting
+   macOS. Five of six frozen runs are complete. The remaining run has 127 unique
+   first attempts persisted.
+2. [x] Run the six registered SciDocs retrieval configurations and
+   whole-document BM25 control.
+3. [x] Add paired paper-clustered bootstrap differences for matched systems.
+4. [x] Report deterministic evidence availability and the complete primary
+   retrieval-versus-generation failure taxonomy.
+
+The Stage 3 implementation and current results are summarized in
+`stage3_deterministic_report.md`. GPT-5 quota exhaustion makes the completed
+cross-model quality comparisons non-selectable. The held-out test remains
+untouched.
 
 ### Stage 4. Add and validate semantic judgments
 

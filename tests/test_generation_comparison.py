@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from rag_eval.generation_comparison import compare_response_validity
+from rag_eval.generation_comparison import (
+    compare_evaluated_runs,
+    compare_response_validity,
+    intersect_eligibility_manifests,
+)
 
 
 MODEL = "test-model"
@@ -90,4 +94,111 @@ def test_compare_response_validity_requires_identical_ordered_cases(tmp_path: Pa
             candidate_eligibility_file=candidate_eligibility,
             track=TRACK,
             model_id=MODEL,
+        )
+
+
+def test_intersect_eligibility_preserves_first_manifest_order(
+    tmp_path: Path,
+):
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first_payload = _eligibility(["q1", "q2", "q3"])
+    first_payload["prompt_version"] = "v3"
+    second_payload = {
+        **_eligibility(["q3", "q1"]),
+        "model_id": "other-model",
+        "prompt_version": "v3",
+    }
+    _write_json(first, first_payload)
+    _write_json(second, second_payload)
+
+    result = intersect_eligibility_manifests([first, second])
+
+    assert result["model_id"] == "matched-common"
+    assert result["eligible_case_ids"] == ["q1", "q3"]
+    assert result["eligible_case_count"] == 2
+    assert len(result["source_manifests"]) == 2
+
+
+def _per_case(case_id: str, paper_id: str, token_f1: float):
+    return {
+        "case_id": case_id,
+        "paper_id": paper_id,
+        "track": "oracle-evidence",
+        "status": "valid",
+        "winning_answer_type": "abstractive",
+        "answer_token_f1": token_f1,
+        "answer_normalized_exact_match": token_f1,
+        "response_mode": "answer",
+        "citation_evaluable": True,
+        "citation_precision": token_f1,
+        "citation_recall": token_f1,
+        "citation_f1": token_f1,
+        "citation_valid": True,
+        "has_citation": True,
+        "missing_reference_evidence": False,
+        "complete_reference_evidence_available": True,
+        "evidence_hit": True,
+        "best_reference_evidence_recall": 1.0,
+        "best_reference_evidence_precision": 1.0,
+        "best_reference_evidence_mrr": 1.0,
+        "best_reference_evidence_ndcg": 1.0,
+    }
+
+
+def test_compare_evaluated_runs_bootstraps_paired_paper_differences(
+    tmp_path: Path,
+):
+    baseline = tmp_path / "baseline-per-case.jsonl"
+    candidate = tmp_path / "candidate-per-case.jsonl"
+    _write_jsonl(
+        baseline,
+        [_per_case("q1", "p1", 0.0), _per_case("q2", "p2", 0.0)],
+    )
+    _write_jsonl(
+        candidate,
+        [_per_case("q1", "p1", 1.0), _per_case("q2", "p2", 1.0)],
+    )
+
+    comparison = compare_evaluated_runs(
+        baseline_per_case_file=baseline,
+        candidate_per_case_file=candidate,
+        track="oracle-evidence",
+        baseline_label="baseline",
+        candidate_label="candidate",
+        resamples=200,
+        seed=7,
+    )
+
+    answer = comparison["metric_differences"]["answer.token_f1"]
+    assert comparison["matched_case_count"] == 2
+    assert comparison["paper_count"] == 2
+    assert answer["candidate_minus_baseline"] == 1.0
+    assert answer["confidence_interval_lower"] == 1.0
+    assert answer["confidence_interval_upper"] == 1.0
+    assert answer["candidate_win_probability"] == 1.0
+
+
+def test_compare_evaluated_runs_requires_identical_ordered_cases(
+    tmp_path: Path,
+):
+    baseline = tmp_path / "baseline-per-case.jsonl"
+    candidate = tmp_path / "candidate-per-case.jsonl"
+    _write_jsonl(
+        baseline,
+        [_per_case("q1", "p1", 0.0), _per_case("q2", "p2", 0.0)],
+    )
+    _write_jsonl(
+        candidate,
+        [_per_case("q2", "p2", 1.0), _per_case("q1", "p1", 1.0)],
+    )
+
+    with pytest.raises(ValueError, match="identical ordered"):
+        compare_evaluated_runs(
+            baseline_per_case_file=baseline,
+            candidate_per_case_file=candidate,
+            track="oracle-evidence",
+            baseline_label="baseline",
+            candidate_label="candidate",
+            resamples=10,
         )

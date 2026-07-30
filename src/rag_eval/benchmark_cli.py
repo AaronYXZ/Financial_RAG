@@ -44,6 +44,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Download and validate the dataset without running experiments.",
     )
+    parser.add_argument(
+        "--whole-document-control",
+        action="store_true",
+        help="Include the diagnostic unchunked BM25 control.",
+    )
+    parser.add_argument(
+        "--whole-document-only",
+        action="store_true",
+        help="Run only the diagnostic unchunked BM25 control.",
+    )
     return parser
 
 
@@ -71,7 +81,11 @@ def main(argv: list[str] | None = None) -> None:
         seed=args.seed,
     )
     strategies = (
-        ("fixed", "recursive") if args.chunker == "both" else (args.chunker,)
+        ()
+        if args.whole_document_only
+        else ("fixed", "recursive")
+        if args.chunker == "both"
+        else (args.chunker,)
     )
     config = BenchmarkConfig(
         dataset=args.dataset,
@@ -84,6 +98,9 @@ def main(argv: list[str] | None = None) -> None:
         k_values=args.k,
         repetitions=args.repetitions,
         seed=args.seed,
+        include_whole_document_bm25=(
+            args.whole_document_control or args.whole_document_only
+        ),
     )
     summary = run_benchmark(dataset, config, args.output_dir)
 

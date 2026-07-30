@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Sequence
 
 from .generation_adapter import OpenAICompatibleAdapter, OpenAIResponsesAdapter
-from .generation_comparison import compare_response_validity, write_comparison
+from .generation_comparison import (
+    compare_evaluated_runs,
+    compare_response_validity,
+    intersect_eligibility_manifests,
+    write_comparison,
+)
 from .generation_metrics import evaluate_prediction_files, load_eligibility_manifest
 from .generation_runner import eligibility_manifest_path, run_generation_cases
 from .generation_retrieval import (
@@ -324,6 +329,36 @@ def _compare_responses(args: argparse.Namespace) -> int:
     return 0
 
 
+def _compare_metrics(args: argparse.Namespace) -> int:
+    comparison = compare_evaluated_runs(
+        baseline_per_case_file=Path(args.baseline_per_case_file),
+        candidate_per_case_file=Path(args.candidate_per_case_file),
+        track=args.track,
+        baseline_label=args.baseline_label,
+        candidate_label=args.candidate_label,
+        resamples=args.bootstrap_resamples,
+        seed=args.bootstrap_seed,
+    )
+    if args.output_file:
+        write_comparison(Path(args.output_file), comparison)
+    print(json.dumps(comparison, indent=2, sort_keys=True))
+    return 0
+
+
+def _intersect_eligibility(args: argparse.Namespace) -> int:
+    payload = intersect_eligibility_manifests(
+        [Path(path) for path in args.eligibility_file]
+    )
+    output_path = Path(args.output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
 def _add_generation_arguments(
     command: argparse.ArgumentParser,
     *,
@@ -595,6 +630,31 @@ def build_parser() -> argparse.ArgumentParser:
         "--model", default="mlx-community/Qwen3-4B-Instruct-2507-4bit"
     )
     compare.set_defaults(handler=_compare_responses)
+    compare_metrics = subparsers.add_parser(
+        "compare-metrics",
+        help="Compare matched per-case metrics with paired paper bootstrap",
+    )
+    compare_metrics.add_argument("--baseline-per-case-file", required=True)
+    compare_metrics.add_argument("--candidate-per-case-file", required=True)
+    compare_metrics.add_argument("--baseline-label", required=True)
+    compare_metrics.add_argument("--candidate-label", required=True)
+    compare_metrics.add_argument("--output-file")
+    compare_metrics.add_argument("--track", choices=tracks, required=True)
+    compare_metrics.add_argument("--bootstrap-resamples", type=int, default=10_000)
+    compare_metrics.add_argument("--bootstrap-seed", type=int, default=42)
+    compare_metrics.set_defaults(handler=_compare_metrics)
+    intersect = subparsers.add_parser(
+        "intersect-eligibility",
+        help="Freeze the ordered common eligible cases across matched systems",
+    )
+    intersect.add_argument(
+        "--eligibility-file",
+        action="append",
+        required=True,
+        help="Eligibility manifest. Pass once per system.",
+    )
+    intersect.add_argument("--output-file", required=True)
+    intersect.set_defaults(handler=_intersect_eligibility)
     return parser
 
 def main(argv: Sequence[str] | None = None) -> int:

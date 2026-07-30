@@ -319,9 +319,10 @@ rag-generation generate-retrieved \
 ```
 
 Qwen3 initially completed 24 cases and produced one invalid-schema response that
-omitted the required `abstain` key. A resume retry skipped the 24 valid cases and
-reproduced the same deterministic error. GPT-5 completed all 25 cases without an
-error.
+omitted the required `abstain` key. A historical diagnostic retry reproduced the
+same deterministic error. Current resume behavior skips every persisted attempt,
+including invalid responses, so an interrupted primary run cannot silently
+become a format-retry experiment. GPT-5 completed all 25 cases without an error.
 
 Generate the metrics with:
 
@@ -426,8 +427,9 @@ endpoint sequentially,
 counts tokens with the original Qwen tokenizer, rejects prompts that exceed the
 shared context limit, validates the strict JSON response, and appends predictions
 to `results/generation/qasper-v1/predictions/qwen3-4b-track-a-v2.jsonl`.
-Repeating the command resumes from existing case, track, model, and
-prompt-version records. It also writes `qwen3-4b-track-a-v2.eligibility.json`,
+Repeating the command resumes from every persisted case, track, model, and
+prompt-version attempt, regardless of response validity. It also writes
+`qwen3-4b-track-a-v2.eligibility.json`,
 which freezes the eligible case IDs used as the metric denominator. Use
 `--no-resume` to overwrite the output.
 
@@ -477,6 +479,44 @@ results/generation/qasper-v1/metrics/qwen3-4b-track-a-v2/
   evaluation_records.jsonl
   per_case_metrics.jsonl
   summary.json
+```
+
+The summary also reports deterministic evidence availability and a primary
+failure attribution for every case. Retrieved-context evidence metrics include
+Hit@K, best-reference Recall@K, Precision@K, MRR@K, NDCG@K, and complete
+reference-evidence-set@K. The primary attribution distinguishes retrieval miss,
+false abstention, answer failure despite sufficient evidence, citation failure,
+format failure, request failure, correct answer, and correct abstention.
+Retrieval noise is reported as a secondary flag because sufficient gold evidence
+can coexist with distractors. Cases without resolvable reference evidence are
+marked unavailable for attribution instead of being assigned to retrieval or
+generation.
+
+Compare two evaluated systems on identical ordered cases with paired
+paper-clustered bootstrap differences:
+
+```bash
+rag-generation compare-metrics \
+  --track oracle-evidence \
+  --baseline-per-case-file results/generation/qasper-v1/metrics/qwen3-4b-oracle-validation-v1/per_case_metrics.jsonl \
+  --candidate-per-case-file results/generation/qasper-v1/metrics/gpt-5-oracle-validation-v1/per_case_metrics.jsonl \
+  --baseline-label qwen3-4b \
+  --candidate-label gpt-5 \
+  --output-file results/generation/qasper-v1/comparisons/oracle-validation-v1.json
+```
+
+The comparison uses 10,000 paired resamples of whole `paper_id` clusters,
+reports a 95 percent interval for every candidate-minus-baseline difference,
+and reports candidate win probability. It fails closed if case order differs.
+
+Use `intersect-eligibility` before freezing a shared retrieval manifest when
+generator context windows produce different eligible subsets:
+
+```bash
+rag-generation intersect-eligibility \
+  --eligibility-file results/generation/qasper-v1/predictions/qwen.eligibility.json \
+  --eligibility-file results/generation/qasper-v1/predictions/gpt.eligibility.json \
+  --output-file results/generation/qasper-v1/predictions/common.eligibility.json
 ```
 
 The summary includes response-status rates, retries, latency, token usage, local

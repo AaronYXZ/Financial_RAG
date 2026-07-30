@@ -133,6 +133,45 @@ def test_freeze_context_defaults_to_bm25_top_five():
     assert args.output_file.endswith("bm25-paper-top5.json")
 
 
+def test_compare_metrics_requires_explicit_matched_run_inputs():
+    args = build_parser().parse_args(
+        [
+            "compare-metrics",
+            "--baseline-per-case-file",
+            "baseline.jsonl",
+            "--candidate-per-case-file",
+            "candidate.jsonl",
+            "--baseline-label",
+            "baseline",
+            "--candidate-label",
+            "candidate",
+            "--track",
+            "oracle-evidence",
+        ]
+    )
+
+    assert args.bootstrap_resamples == 10_000
+    assert args.bootstrap_seed == 42
+    assert args.track == "oracle-evidence"
+
+
+def test_intersect_eligibility_accepts_multiple_source_manifests():
+    args = build_parser().parse_args(
+        [
+            "intersect-eligibility",
+            "--eligibility-file",
+            "qwen.json",
+            "--eligibility-file",
+            "gpt.json",
+            "--output-file",
+            "common.json",
+        ]
+    )
+
+    assert args.eligibility_file == ["qwen.json", "gpt.json"]
+    assert args.output_file == "common.json"
+
+
 def test_retrieved_context_is_a_supported_track():
     args = build_parser().parse_args(
         ["run", "--track", "retrieved-context", "--context-manifest", "frozen.json"]

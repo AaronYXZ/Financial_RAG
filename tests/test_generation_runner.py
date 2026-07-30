@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,16 @@ class FakeAdapter:
             latency_seconds=0.1,
             input_tokens=100,
             output_tokens=20,
+        )
+
+
+class InvalidAdapter(FakeAdapter):
+    def generate(self, system_prompt, user_prompt):
+        return AdapterResult(
+            text='{"answer":"Evidence"}',
+            latency_seconds=0.1,
+            input_tokens=100,
+            output_tokens=5,
         )
 
 
@@ -81,6 +92,28 @@ def test_runner_persists_valid_prediction_manifest_and_resumes(tmp_path: Path):
     assert manifest["model_id"] == "fake-model"
     assert manifest["schema_version"] == 2
     assert manifest["prompt_version"] == PROMPT_VERSION
+
+
+def test_resume_does_not_retry_a_persisted_invalid_response(tmp_path: Path):
+    output = tmp_path / "invalid.jsonl"
+
+    first = run_generation_cases(
+        [CASE],
+        adapter=InvalidAdapter(),
+        track="oracle-evidence",
+        output_file=output,
+    )
+    second = run_generation_cases(
+        [CASE],
+        adapter=InvalidAdapter(),
+        track="oracle-evidence",
+        output_file=output,
+    )
+
+    rows = output.read_text().splitlines()
+    assert first["errors"] == 1
+    assert second["skipped"] == 1
+    assert len(rows) == 1
 
 
 def test_runner_excludes_case_over_shared_context_limit(tmp_path: Path):
@@ -216,3 +249,22 @@ def test_runner_records_openai_provider_without_changing_run_identity(tmp_path: 
     assert row["model_id"] == "gpt-test"
     assert manifest["provider"] == "openai"
     assert manifest["model_id"] == "gpt-test"
+
+
+def test_oracle_runner_excludes_answerable_case_without_resolved_evidence(
+    tmp_path: Path,
+):
+    unresolved = replace(CASE, case_id="unresolved", oracle_passage_ids=())
+    output = tmp_path / "oracle.jsonl"
+
+    counts = run_generation_cases(
+        [unresolved],
+        adapter=FakeAdapter(),
+        track="oracle-evidence",
+        output_file=output,
+        max_cases=None,
+    )
+
+    manifest = json.loads(eligibility_manifest_path(output).read_text())
+    assert counts["selected"] == 0
+    assert manifest["excluded_counts"]["missing_oracle_evidence"] == 1

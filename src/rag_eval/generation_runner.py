@@ -35,15 +35,14 @@ def _completed_keys(path: Path) -> set[tuple[str, str, str, str | None]]:
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             row = json.loads(line)
-            if row.get("error") is None:
-                completed.add(
-                    (
-                        row["case_id"],
-                        row["track"],
-                        row["model_id"],
-                        row.get("prompt_version"),
-                    )
+            completed.add(
+                (
+                    row["case_id"],
+                    row["track"],
+                    row["model_id"],
+                    row.get("prompt_version"),
                 )
+            )
     return completed
 
 
@@ -63,13 +62,20 @@ def _select_eligible_cases(
     passage_lookup: Mapping[str, PaperPassage] | None = None,
 ) -> tuple[list[EligibleCase], dict[str, int]]:
     eligible: list[EligibleCase] = []
-    exclusions = {"track_filter": 0, "context_limit": 0}
+    exclusions = {
+        "track_filter": 0,
+        "missing_oracle_evidence": 0,
+        "context_limit": 0,
+    }
     case_list = list(cases)
     if passage_lookup is None:
         passage_lookup = unique_passages(case_list)
     for case in case_list:
         if track == "oracle-evidence" and case.answerability != "answerable":
             exclusions["track_filter"] += 1
+            continue
+        if track == "oracle-evidence" and not case.oracle_passage_ids:
+            exclusions["missing_oracle_evidence"] += 1
             continue
         if track == "complete-paper" and case.answerability == "ambiguous":
             exclusions["track_filter"] += 1
@@ -208,7 +214,7 @@ def run_generation_cases(
         "selected": len(eligible),
         "completed": 0,
         "skipped": 0,
-        "ineligible": exclusions["context_limit"],
+        "ineligible": sum(exclusions.values()),
         "errors": 0,
     }
 

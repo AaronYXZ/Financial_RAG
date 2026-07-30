@@ -40,6 +40,7 @@ class BenchmarkConfig:
     rrf_k: int = 60
     repetitions: int = 3
     seed: int = 42
+    include_whole_document_bm25: bool = False
 
 
 def run_benchmark(
@@ -162,6 +163,41 @@ def run_benchmark(
                 build_seconds=lexical_build_seconds + dense_build_seconds,
                 index_size_bytes=lexical.index_size_bytes + dense.index_size_bytes,
                 common=common,
+                session_dir=session_dir,
+            )
+        )
+
+    if config.include_whole_document_bm25:
+        lexical_build_started = time.perf_counter()
+        lexical = PreparedBM25Retriever(dataset.corpus)
+        lexical_build_seconds = time.perf_counter() - lexical_build_started
+        lexical_result = _search_repeated(
+            lexical,
+            dataset,
+            max(config.k_values),
+            config.repetitions,
+        )
+        reports.append(
+            _build_report(
+                dataset,
+                config,
+                run_id=f"{config.dataset}-whole-document-bm25",
+                retriever="bm25",
+                run=lexical_result.run,
+                winners={},
+                latencies=lexical_result.query_latencies_ms,
+                build_seconds=lexical_build_seconds,
+                index_size_bytes=lexical.index_size_bytes,
+                common={
+                    "session_id": session_id,
+                    "chunker": "whole-document",
+                    "chunk_manifest_hash": None,
+                    "chunk_stats": {
+                        "chunks": len(dataset.corpus),
+                        "documents": len(dataset.corpus),
+                    },
+                    "chunking_seconds": 0.0,
+                },
                 session_dir=session_dir,
             )
         )
@@ -345,8 +381,8 @@ def _write_summary_csv(path: Path, reports: list[dict]) -> None:
 
 
 def _validate_config(config: BenchmarkConfig) -> None:
-    if not config.chunk_strategies:
-        raise ValueError("at least one chunk strategy is required")
+    if not config.chunk_strategies and not config.include_whole_document_bm25:
+        raise ValueError("at least one retrieval configuration is required")
     if config.repetitions <= 0:
         raise ValueError("repetitions must be positive")
     if not config.k_values or any(k <= 0 for k in config.k_values):
