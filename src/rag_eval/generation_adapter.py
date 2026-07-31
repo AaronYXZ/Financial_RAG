@@ -175,6 +175,8 @@ class OpenAIResponsesAdapter:
         reasoning_effort: str = "low",
         timeout_seconds: float = 300.0,
         runtime_retries: int = 1,
+        response_schema: Mapping[str, Any] = GENERATION_RESPONSE_SCHEMA,
+        response_schema_name: str = "generation_response",
     ) -> None:
         if runtime_retries < 0:
             raise ValueError("runtime_retries cannot be negative")
@@ -200,6 +202,8 @@ class OpenAIResponsesAdapter:
         self.max_output_tokens = max_output_tokens
         self.reasoning_effort = reasoning_effort
         self.runtime_retries = runtime_retries
+        self.response_schema = dict(response_schema)
+        self.response_schema_name = response_schema_name
         self.client = OpenAI(
             api_key=api_key,
             timeout=timeout_seconds,
@@ -239,9 +243,17 @@ class OpenAIResponsesAdapter:
             "text": {
                 "format": {
                     "type": "json_schema",
-                    "name": "generation_response",
+                    "name": getattr(
+                        self,
+                        "response_schema_name",
+                        "generation_response",
+                    ),
                     "strict": True,
-                    "schema": GENERATION_RESPONSE_SCHEMA,
+                    "schema": getattr(
+                        self,
+                        "response_schema",
+                        GENERATION_RESPONSE_SCHEMA,
+                    ),
                 }
             },
         }
@@ -300,6 +312,8 @@ class OpenRouterChatAdapter:
         temperature: float = 0.0,
         timeout_seconds: float = 300.0,
         runtime_retries: int = 1,
+        response_schema: Mapping[str, Any] = GENERATION_RESPONSE_SCHEMA,
+        response_schema_name: str = "generation_response",
     ) -> None:
         if runtime_retries < 0:
             raise ValueError("runtime_retries cannot be negative")
@@ -331,6 +345,8 @@ class OpenRouterChatAdapter:
         self.temperature = temperature
         self.timeout_seconds = timeout_seconds
         self.runtime_retries = runtime_retries
+        self.response_schema = dict(response_schema)
+        self.response_schema_name = response_schema_name
         self.encoding = tiktoken.get_encoding("o200k_base")
 
     def count_tokens(self, system_prompt: str, user_prompt: str) -> int:
@@ -395,9 +411,17 @@ class OpenRouterChatAdapter:
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": "generation_response",
+                    "name": getattr(
+                        self,
+                        "response_schema_name",
+                        "generation_response",
+                    ),
                     "strict": True,
-                    "schema": GENERATION_RESPONSE_SCHEMA,
+                    "schema": getattr(
+                        self,
+                        "response_schema",
+                        GENERATION_RESPONSE_SCHEMA,
+                    ),
                 },
             },
             "provider": {"require_parameters": True},

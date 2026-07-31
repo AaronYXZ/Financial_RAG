@@ -287,10 +287,13 @@ quota-confounded and non-selectable. The held-out test remains untouched.
 
 ### Stage 4. Add and validate semantic judgments
 
-1. Implement blinded claim extraction, claim support, citation entailment,
-   faithfulness, semantic correctness, and completeness evaluation.
-2. Cache and version judge inputs, outputs, prompts, and models.
-3. Complete the stratified human audit and measure human-judge agreement.
+1. [x] Implement blinded claim extraction, claim support, citation entailment,
+   faithfulness, semantic correctness, and rubric completeness evaluation.
+   `rag-semantic-judge` now prepares anonymous inputs, runs a strict structured
+   judge, and aggregates claim-level and case-level semantic metrics. No paid
+   semantic judge run has been executed yet.
+2. [ ] Cache and version judge inputs, outputs, prompts, and models.
+3. [ ] Complete the stratified human audit and measure human-judge agreement.
 
 ### Stage 5. Final evaluation and reporting
 

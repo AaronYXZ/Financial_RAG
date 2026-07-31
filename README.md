@@ -604,7 +604,61 @@ precision, recall, F1, false
 answers, false abstentions, no decisions, a confusion matrix, confidence
 availability, expected calibration error, a risk-coverage curve, and its area.
 All tracks include deterministic 95 percent percentile intervals from 10,000
-paper-clustered bootstrap resamples. Rubric metrics remain a future stage.
+paper-clustered bootstrap resamples.
+
+## Blinded semantic evaluation
+
+The semantic judge supplements the deterministic metrics. It extracts atomic
+material claims, labels context support as `supported`, `contradicted`, or
+`not_in_context`, checks whether each associated anonymous citation entails its
+claim, and assigns semantic-correctness and rubric-completeness scores from 0 to
+4. QASPER does not provide atomic required-fact annotations, so completeness is
+not reported as exact required-fact recall.
+
+Prepare judge inputs separately from judge execution. The prepared JSONL contains
+only the question, supplied context, references, candidate answer, and anonymous
+context IDs in its `judge_input` field. Generator identity and source checksums
+are kept in the sidecar manifest and are never rendered into the judge prompt.
+
+```bash
+rag-semantic-judge prepare \
+  --cases-file data/generation/qasper-v1/validation.cases.jsonl \
+  --predictions-file results/generation/qasper-v1/predictions/gpt-5.6-luna-pro-hybrid-minilm-paper-top5-validation-v1.jsonl \
+  --output-file results/generation/qasper-v1/semantic/luna-pro-hybrid-validation-v1.inputs.jsonl \
+  --track retrieved-context \
+  --generator-model openai/gpt-5.6-luna-pro
+```
+
+Run a one-case judge smoke test before any larger paid evaluation:
+
+```bash
+rag-semantic-judge run \
+  --provider openrouter \
+  --env-file .env \
+  --inputs-file results/generation/qasper-v1/semantic/luna-pro-hybrid-validation-v1.inputs.jsonl \
+  --output-file results/generation/qasper-v1/semantic/luna-pro-hybrid-validation-v1.judgments.jsonl \
+  --judge-model anthropic/claude-sonnet-4.5 \
+  --max-cases 1 \
+  --retries 0
+```
+
+The runner rejects a judge model, including a configured fallback, when it
+matches the generator. It records request failures separately and validates
+every response against a strict JSON schema. No paid judge call is made by
+preparation or summarization.
+
+```bash
+rag-semantic-judge summarize \
+  --judgments-file results/generation/qasper-v1/semantic/luna-pro-hybrid-validation-v1.judgments.jsonl \
+  --output-dir results/generation/qasper-v1/semantic/luna-pro-hybrid-validation-v1
+```
+
+The summary reports claim-weighted and case-macro support, fully faithful cases,
+citation entailment and citation completeness, mean rubric scores, score
+distributions, and evaluator failures. This custom harness is the reporting
+source of truth. Ragas is not used in this implementation because the frozen
+protocol requires explicit three-way claim labels and passage-level anonymous
+citation judgments that its standard metrics do not directly preserve.
 
 ## Evaluation design
 
@@ -770,16 +824,17 @@ Detailed execution contract: [Phase 3 fixed-context generation specification](be
 - [x] Require a structured response containing the answer, citations, and an
   abstention indicator.
 - [x] Measure answer correctness against QASPER reference answers.
-- [ ] Measure faithfulness by checking that each material claim is supported by
+- [x] Measure faithfulness by checking that each material claim is supported by
   the supplied context.
-- [ ] Measure rubric completeness against the references and context. QASPER does
+- [x] Measure rubric completeness against the references and context. QASPER does
   not contain atomic required-fact annotations.
 - [x] Measure citation precision and recall against annotated evidence sets.
-- [ ] Measure whether each citation supports its associated generated claim.
+- [x] Measure whether each citation supports its associated generated claim.
 - [ ] Test appropriate abstention using both answerable and unanswerable
   questions. Report false-answer and false-abstention rates separately.
-- [ ] Combine deterministic checks with a rubric-based evaluator. Blind the
-  evaluator to system names and randomize candidate order.
+- [ ] Combine deterministic checks with a rubric-based evaluator. Blinding is
+  implemented. Candidate-order randomization remains pending if pairwise judging
+  is added.
 - [ ] Manually audit a stratified sample and measure agreement between human and
   automated judgments.
 - [x] Record input tokens, output tokens, cost, p50/p95/p99 latency, errors, and
