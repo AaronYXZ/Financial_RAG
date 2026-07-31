@@ -297,4 +297,8 @@ quota-confounded and non-selectable. The held-out test remains untouched.
   resume.
 - `src/rag_eval/generation/prompt.py`. Prompt v2 and response validation.
 - `src/rag_eval/generation/metrics.py`. Deterministic generation metrics.
+- `src/rag_eval/end_to_end/workflow.py`. Frozen-retrieval and end-to-end
+  workflow composition.
+- `src/rag_eval/end_to_end/attribution.py`. Deterministic retrieval-versus-
+  generation failure attribution.
 - `tests/test_generation_metrics.py`. Deterministic metric and bootstrap tests.

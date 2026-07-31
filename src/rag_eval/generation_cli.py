@@ -1,4 +1,4 @@
-"""Command-line preparation and validation for Phase 3 QASPER data."""
+"""Stable CLI façade for QASPER benchmark workflows."""
 
 from __future__ import annotations
 
@@ -9,6 +9,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Sequence
 
+from .end_to_end.workflow import (
+    freeze_context_manifest,
+    run_retrieved_context_generation,
+    run_retrieve_then_generate,
+)
 from .generation.adapter import (
     OpenAICompatibleAdapter,
     OpenAIResponsesAdapter,
@@ -21,17 +26,11 @@ from .generation.comparison import (
     intersect_eligibility_manifests,
     write_comparison,
 )
-from .generation.metrics import evaluate_prediction_files, load_eligibility_manifest
+from .generation.metrics import evaluate_prediction_files
 from .generation.runner import eligibility_manifest_path, run_generation_cases
 from .retrieval.context import (
     DENSE_MODEL_1,
     DENSE_MODEL_2,
-    file_sha256,
-    freeze_retrieved_contexts,
-    frozen_contexts_by_case,
-    load_frozen_context_manifest,
-    retriever_manifest,
-    write_frozen_context_manifest,
 )
 from .retrieval.evaluation import compare_retrieval_to_oracle
 
@@ -135,7 +134,36 @@ def _execute_generation(
     context_manifest: str | None = None,
 ) -> int:
     cases_path = Path(args.cases_file)
-    cases = _load_cases(cases_path)
+    adapter = _build_adapter(args)
+    if track == "retrieved-context":
+        if not context_manifest:
+            raise ValueError("--context-manifest is required for retrieved-context")
+        counts = run_retrieved_context_generation(
+            cases_file=cases_path,
+            context_manifest_file=Path(context_manifest),
+            adapter=adapter,
+            output_file=Path(args.output_file),
+            max_context_tokens=args.max_context_tokens,
+            max_output_tokens=args.max_output_tokens,
+            max_cases=getattr(args, "max_cases", None),
+            resume=args.resume,
+        )
+    else:
+        counts = run_generation_cases(
+            _load_cases(cases_path),
+            adapter=adapter,
+            track=track,
+            output_file=Path(args.output_file),
+            max_context_tokens=args.max_context_tokens,
+            max_output_tokens=args.max_output_tokens,
+            max_cases=getattr(args, "max_cases", None),
+            resume=args.resume,
+        )
+    print(json.dumps(counts, indent=2, sort_keys=True))
+    return 1 if counts["errors"] else 0
+
+
+def _build_adapter(args: argparse.Namespace):
     if args.provider == "openai":
         allowed_efforts = OPENAI_REASONING_EFFORTS[args.openai_model]
         if args.openai_reasoning_effort not in allowed_efforts:
@@ -143,7 +171,7 @@ def _execute_generation(
                 f"{args.openai_model} supports reasoning efforts {allowed_efforts}, "
                 f"not {args.openai_reasoning_effort!r}"
             )
-        adapter = OpenAIResponsesAdapter(
+        return OpenAIResponsesAdapter(
             model_id=args.openai_model,
             env_file=Path(args.env_file),
             api_key_env=args.openai_api_key_env,
@@ -153,7 +181,7 @@ def _execute_generation(
             runtime_retries=args.retries,
         )
     elif args.provider == "openrouter":
-        adapter = OpenRouterChatAdapter(
+        return OpenRouterChatAdapter(
             model_id=args.openrouter_model,
             env_file=Path(args.env_file),
             api_key_env=args.openrouter_api_key_env,
@@ -167,7 +195,7 @@ def _execute_generation(
             runtime_retries=args.retries,
         )
     else:
-        adapter = OpenAICompatibleAdapter(
+        return OpenAICompatibleAdapter(
             base_url=args.base_url,
             model_id=args.model,
             tokenizer_id=args.tokenizer,
@@ -176,32 +204,6 @@ def _execute_generation(
             timeout_seconds=args.timeout,
             runtime_retries=args.retries,
         )
-    retrieved_contexts = None
-    context_manifest_sha256 = None
-    if track == "retrieved-context":
-        if not context_manifest:
-            raise ValueError("--context-manifest is required for retrieved-context")
-        context_manifest_path = Path(context_manifest)
-        context_manifest = load_frozen_context_manifest(context_manifest_path)
-        if context_manifest["cases_sha256"] != file_sha256(cases_path):
-            raise ValueError("Frozen context manifest cases checksum does not match")
-        retrieved_contexts = frozen_contexts_by_case(context_manifest)
-        context_manifest_sha256 = file_sha256(context_manifest_path)
-
-    counts = run_generation_cases(
-        cases,
-        adapter=adapter,
-        track=track,
-        output_file=Path(args.output_file),
-        max_context_tokens=args.max_context_tokens,
-        max_output_tokens=args.max_output_tokens,
-        max_cases=getattr(args, "max_cases", None),
-        resume=args.resume,
-        retrieved_contexts=retrieved_contexts,
-        context_manifest_sha256=context_manifest_sha256,
-    )
-    print(json.dumps(counts, indent=2, sort_keys=True))
-    return 1 if counts["errors"] else 0
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -224,57 +226,9 @@ def _generate_retrieved(args: argparse.Namespace) -> int:
     )
 
 
-def _freeze_context_payload(
-    *,
-    cases_path: Path,
-    eligibility_file: Path,
-    output_file: Path,
-    top_k: int,
-    retriever: str,
-    retrieval_scope: str,
-    dense_model: str,
-    dense_batch_size: int,
-    hybrid_rrf_k: int,
-    hybrid_candidate_k: int | None,
-) -> dict:
-    cases = _load_cases(cases_path)
-    eligibility = load_eligibility_manifest(eligibility_file)
-    case_ids = eligibility["eligible_case_ids"]
-    contexts = freeze_retrieved_contexts(
-        cases,
-        eligible_case_ids=case_ids,
-        top_k=top_k,
-        method=retriever,
-        scope=retrieval_scope,
-        dense_model=dense_model,
-        dense_batch_size=dense_batch_size,
-        hybrid_rrf_k=hybrid_rrf_k,
-        hybrid_candidate_k=hybrid_candidate_k,
-    )
-    retriever_metadata = retriever_manifest(
-        method=retriever,
-        scope=retrieval_scope,
-        top_k=top_k,
-        dense_model=dense_model,
-        dense_batch_size=dense_batch_size,
-        hybrid_rrf_k=hybrid_rrf_k,
-        hybrid_candidate_k=hybrid_candidate_k,
-    )
-    return write_frozen_context_manifest(
-        output_file,
-        cases_file=cases_path,
-        eligibility_file=eligibility_file,
-        eligible_case_ids=case_ids,
-        contexts=contexts,
-        top_k=top_k,
-        retrieval_scope=retrieval_scope,
-        retriever=retriever_metadata,
-    )
-
-
 def _freeze_context(args: argparse.Namespace) -> int:
-    payload = _freeze_context_payload(
-        cases_path=Path(args.cases_file),
+    payload = freeze_context_manifest(
+        cases_file=Path(args.cases_file),
         eligibility_file=Path(args.eligibility_file),
         output_file=Path(args.output_file),
         top_k=args.top_k,
@@ -291,10 +245,12 @@ def _freeze_context(args: argparse.Namespace) -> int:
 
 def _generate_end_to_end(args: argparse.Namespace) -> int:
     context_manifest = Path(args.context_manifest)
-    payload = _freeze_context_payload(
-        cases_path=Path(args.cases_file),
+    payload, counts = run_retrieve_then_generate(
+        cases_file=Path(args.cases_file),
         eligibility_file=Path(args.eligibility_file),
-        output_file=context_manifest,
+        context_manifest_file=context_manifest,
+        adapter=_build_adapter(args),
+        output_file=Path(args.output_file),
         top_k=args.top_k,
         retriever=args.retriever,
         retrieval_scope=args.retrieval_scope,
@@ -302,6 +258,10 @@ def _generate_end_to_end(args: argparse.Namespace) -> int:
         dense_batch_size=args.dense_batch_size,
         hybrid_rrf_k=args.hybrid_rrf_k,
         hybrid_candidate_k=args.hybrid_candidate_k,
+        max_context_tokens=args.max_context_tokens,
+        max_output_tokens=args.max_output_tokens,
+        max_cases=getattr(args, "max_cases", None),
+        resume=args.resume,
     )
     print(
         json.dumps(
@@ -316,11 +276,8 @@ def _generate_end_to_end(args: argparse.Namespace) -> int:
             sort_keys=True,
         )
     )
-    return _execute_generation(
-        args,
-        track="retrieved-context",
-        context_manifest=str(context_manifest),
-    )
+    print(json.dumps(counts, indent=2, sort_keys=True))
+    return 1 if counts["errors"] else 0
 
 
 def _metrics(args: argparse.Namespace) -> int:

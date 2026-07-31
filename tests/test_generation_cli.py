@@ -355,42 +355,37 @@ def test_end_to_end_handler_passes_new_manifest_to_generation(
         dense_batch_size=16,
         hybrid_rrf_k=40,
         hybrid_candidate_k=20,
+        output_file=str(tmp_path / "predictions.jsonl"),
+        max_context_tokens=32_768,
+        max_output_tokens=1024,
+        max_cases=None,
+        resume=True,
     )
 
-    def fake_freeze(**kwargs):
-        calls.append(("freeze", kwargs))
-        return {
-            "eligible_case_count": 3,
-            "retriever": {"name": "bm25", "parameters": {"top_k": 7}},
-        }
-
-    def fake_execute(received_args, *, track, context_manifest):
-        calls.append(
-            (
-                "generate",
-                {
-                    "args": received_args,
-                    "track": track,
-                    "context_manifest": context_manifest,
-                },
-            )
+    def fake_workflow(**kwargs):
+        calls.append(kwargs)
+        return (
+            {
+                "eligible_case_count": 3,
+                "retriever": {"name": "hybrid", "parameters": {"top_k": 7}},
+            },
+            {
+                "selected": 3,
+                "completed": 3,
+                "skipped": 0,
+                "ineligible": 0,
+                "errors": 0,
+            },
         )
-        return 0
 
-    monkeypatch.setattr(generation_cli, "_freeze_context_payload", fake_freeze)
-    monkeypatch.setattr(generation_cli, "_execute_generation", fake_execute)
+    adapter = object()
+    monkeypatch.setattr(generation_cli, "_build_adapter", lambda received: adapter)
+    monkeypatch.setattr(generation_cli, "run_retrieve_then_generate", fake_workflow)
 
     assert generation_cli._generate_end_to_end(args) == 0
-    assert calls[0][0] == "freeze"
-    assert calls[0][1]["top_k"] == 7
-    assert calls[0][1]["retriever"] == "hybrid"
-    assert calls[0][1]["retrieval_scope"] == "paper"
-    assert calls[0][1]["dense_model"] == "dense-model"
-    assert calls[1] == (
-        "generate",
-        {
-            "args": args,
-            "track": "retrieved-context",
-            "context_manifest": str(context_manifest),
-        },
-    )
+    assert calls[0]["adapter"] is adapter
+    assert calls[0]["context_manifest_file"] == context_manifest
+    assert calls[0]["top_k"] == 7
+    assert calls[0]["retriever"] == "hybrid"
+    assert calls[0]["retrieval_scope"] == "paper"
+    assert calls[0]["dense_model"] == "dense-model"
