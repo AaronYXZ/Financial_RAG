@@ -1,6 +1,4 @@
-"""BEIR-compatible retrieval evaluation tools."""
+"""Reproducible QASPER retrieval and generation evaluation tools."""
 
-from rag_eval.metrics import evaluate
-
-__all__ = ["evaluate"]
+__all__: list[str] = []
 __version__ = "0.1.0"

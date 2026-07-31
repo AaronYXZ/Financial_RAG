@@ -1,7 +1,7 @@
 import pytest
 
-from rag_eval.generation_context import build_fixed_context
-from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
+from rag_eval.generation.context import build_fixed_context
+from rag_eval.generation.data import GenerationCase, PaperPassage, ReferenceAnswer
 
 
 PASSAGES = (
@@ -41,6 +41,27 @@ def test_oracle_track_returns_only_evidence_in_document_order():
 
 def test_complete_paper_track_returns_every_passage():
     assert build_fixed_context(_case(), "complete-paper") == PASSAGES
+
+
+def test_retrieved_track_uses_frozen_passage_order():
+    assert build_fixed_context(
+        _case(),
+        "retrieved-context",
+        retrieved_passage_ids=("p1", "p0"),
+        passage_lookup={passage.passage_id: passage for passage in PASSAGES},
+    ) == (PASSAGES[1], PASSAGES[0])
+
+
+def test_retrieved_track_rejects_missing_manifest_or_passages():
+    with pytest.raises(ValueError, match="frozen context manifest"):
+        build_fixed_context(_case(), "retrieved-context")
+    with pytest.raises(ValueError, match="unknown retrieved passages"):
+        build_fixed_context(
+            _case(),
+            "retrieved-context",
+            retrieved_passage_ids=("missing",),
+            passage_lookup={passage.passage_id: passage for passage in PASSAGES},
+        )
 
 
 def test_oracle_track_rejects_unanswerable_or_missing_evidence():

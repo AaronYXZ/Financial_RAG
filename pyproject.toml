@@ -5,34 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "local-rag-eval"
 version = "0.1.0"
-description = "A small, reproducible retrieval evaluation harness for BEIR datasets."
+description = "A reproducible QASPER RAG evaluation harness."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
-dense = [
-    "numpy>=1.26",
-    "sentence-transformers>=3.0",
-]
-benchmark = [
-    "langchain-text-splitters>=1.0,<2",
+retrieval = [
     "numpy>=1.26",
     "sentence-transformers>=3.0,<6",
-    "transformers>=4.41,<6",
 ]
 generation = [
     "datasets>=3.0,<5",
     "transformers>=4.51,<6",
+]
+openai = [
+    "openai>=2.0,<3",
+    "python-dotenv>=1.0,<2",
+    "tiktoken>=0.9,<1",
+]
+openrouter = [
+    "python-dotenv>=1.0,<2",
+    "tiktoken>=0.9,<1",
 ]
 dev = [
     "pytest>=8.0",
 ]
 
 [project.scripts]
-rag-eval = "rag_eval.cli:main"
-rag-benchmark = "rag_eval.benchmark_cli:main"
 rag-generation = "rag_eval.generation_cli:main"
+rag-semantic-judge = "rag_eval.semantic_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
-from rag_eval.generation_metrics import (
+from rag_eval.generation.data import GenerationCase, PaperPassage, ReferenceAnswer
+from rag_eval.generation.metrics import (
     EvaluationRecord,
     aggregate_abstention_quality,
     aggregate_answer_quality,
@@ -16,6 +16,7 @@ from rag_eval.generation_metrics import (
     evaluate_prediction_files,
     normalize_answer,
     normalized_exact_match,
+    paper_clustered_bootstrap_intervals,
     reference_answer,
     reliability_and_efficiency,
     score_answer_record,
@@ -162,6 +163,25 @@ def test_join_uses_frozen_denominator_last_retry_and_missing_prediction():
     assert reliability["total_tokens"]["sum"] == 240.0
 
 
+def test_openai_cost_is_not_incorrectly_reported_as_zero():
+    row = prediction("q1", provider="openai")
+    record = EvaluationRecord(
+        case=make_case("q1", (make_reference("a1"),)),
+        track="oracle-evidence",
+        model_id="test-model",
+        status="valid",
+        prediction=row,
+        duplicate_prediction_count=0,
+    )
+
+    cost = reliability_and_efficiency([record])["estimated_cost_usd"]
+
+    assert cost["pricing_basis"] == (
+        "unavailable_without_frozen_provider_price_table"
+    )
+    assert cost["observed_total"] is None
+
+
 def test_answer_scoring_maximizes_over_references_and_scores_failures_zero():
     case = make_case(
         "q1",
@@ -262,8 +282,13 @@ def test_evaluator_writes_stage_zero_to_five_artifacts(tmp_path: Path):
     assert summary["prompt_version"] == "qasper-generation-v2"
     assert summary["answer_quality"]["token_f1"] == 1.0
     assert summary["citation_quality"]["citation_f1"] == 1.0
+    assert summary["failure_attribution"]["primary_outcome_counts"] == {
+        "correct_answer": 1
+    }
     assert summary["abstention_quality"]["applicable"] is False
     assert summary["confidence_and_calibration"]["applicable"] is False
+    assert summary["paper_clustered_bootstrap"]["resamples"] == 10_000
+    assert summary["paper_clustered_bootstrap"]["paper_count"] == 1
     assert (output_dir / "evaluation_records.jsonl").is_file()
     assert (output_dir / "per_case_metrics.jsonl").is_file()
     assert json.loads((output_dir / "summary.json").read_text()) == summary
@@ -301,6 +326,70 @@ def test_citation_scoring_selects_best_human_evidence_set():
     assert score["citation_recall"] == 1.0
     assert score["citation_f1"] == 1.0
     assert score["citation_reference_scores"][0]["citation_f1"] == pytest.approx(2 / 3)
+
+
+def test_retrieved_context_attributes_missing_complete_evidence_to_retrieval():
+    distractor = replace(
+        PASSAGE,
+        passage_id="paper::paragraph::0002",
+        text="Distractor",
+        order=1,
+    )
+    case = replace(
+        make_case("q1", (make_reference("a1"),)),
+        paper_passages=(PASSAGE, distractor),
+    )
+    row = prediction(
+        "q1",
+        track="retrieved-context",
+        context_passage_ids=[distractor.passage_id],
+        parsed_response={
+            "answer": "wrong",
+            "abstain": False,
+            "citations": [distractor.passage_id],
+            "confidence": 0.8,
+        },
+    )
+    score = score_answer_record(
+        EvaluationRecord(
+            case,
+            "retrieved-context",
+            "test-model",
+            "valid",
+            row,
+            0,
+        )
+    )
+
+    assert score["evidence_hit"] is False
+    assert score["best_reference_evidence_recall"] == 0.0
+    assert score["best_reference_evidence_mrr"] == 0.0
+    assert score["best_reference_evidence_ndcg"] == 0.0
+    assert score["complete_reference_evidence_available"] is False
+    assert score["failure_attribution"] == "retrieval_miss"
+
+
+def test_retrieved_context_does_not_attribute_unresolved_gold_evidence():
+    case = make_case(
+        "q1",
+        (replace(make_reference("a1"), evidence_ids=()),),
+    )
+    row = prediction("q1", track="retrieved-context")
+    score = score_answer_record(
+        EvaluationRecord(
+            case,
+            "retrieved-context",
+            "test-model",
+            "valid",
+            row,
+            0,
+        )
+    )
+
+    assert score["complete_reference_evidence_available"] is None
+    assert score["failure_attribution"] == (
+        "evidence_unavailable_for_attribution"
+    )
 
 
 def test_citation_aggregate_reports_abstention_invalid_and_missing_evidence():
@@ -502,7 +591,7 @@ def test_abstention_metrics_are_not_applicable_to_oracle_evidence_track():
 
     assert summary == {
         "applicable": False,
-        "reason": "Abstention metrics require the complete-paper track",
+        "reason": "Abstention metrics require a non-oracle context track",
         "case_count": 1,
     }
 
@@ -642,3 +731,78 @@ def test_risk_coverage_groups_confidence_ties():
     assert len(summary["risk_coverage_curve"]) == 1
     assert summary["risk_coverage_curve"][0]["coverage"] == 1.0
     assert summary["area_under_risk_coverage_curve"] == 0.5
+
+
+def test_paper_clustered_bootstrap_is_deterministic_and_resamples_whole_papers():
+    paper_one_case = make_case(
+        "paper-one-a",
+        (make_reference("paper-one-a-reference", text="correct"),),
+    )
+    paper_one_case = replace(paper_one_case, paper_id="paper-one")
+    paper_one_second_case = replace(
+        paper_one_case,
+        case_id="paper-one-b",
+        references=(make_reference("paper-one-b-reference", text="correct"),),
+    )
+    paper_two_case = make_case(
+        "paper-two-a",
+        (make_reference("paper-two-reference", text="different"),),
+    )
+    paper_two_case = replace(paper_two_case, paper_id="paper-two")
+
+    def scored(case: GenerationCase, answer: str):
+        return score_answer_record(
+            EvaluationRecord(
+                case,
+                "oracle-evidence",
+                "test-model",
+                "valid",
+                prediction(
+                    case.case_id,
+                    parsed_response={
+                        "answer": answer,
+                        "abstain": False,
+                        "citations": [PASSAGE.passage_id],
+                        "confidence": 0.8,
+                    },
+                ),
+                0,
+            )
+        )
+
+    per_case = [
+        scored(paper_one_case, "correct"),
+        scored(paper_one_second_case, "correct"),
+        scored(paper_two_case, "wrong"),
+    ]
+    first = paper_clustered_bootstrap_intervals(
+        per_case,
+        track="oracle-evidence",
+        resamples=500,
+        seed=7,
+    )
+    second = paper_clustered_bootstrap_intervals(
+        per_case,
+        track="oracle-evidence",
+        resamples=500,
+        seed=7,
+    )
+
+    assert first == second
+    assert first["paper_count"] == 2
+    token_f1 = first["intervals"]["answer.token_f1"]
+    assert token_f1["point_estimate"] == pytest.approx(2 / 3)
+    assert token_f1["lower"] == 0.0
+    assert token_f1["upper"] == 1.0
+    assert token_f1["valid_resample_count"] == 500
+
+
+def test_paper_clustered_bootstrap_validates_configuration():
+    with pytest.raises(ValueError, match="resamples"):
+        paper_clustered_bootstrap_intervals([], track="oracle-evidence", resamples=0)
+    with pytest.raises(ValueError, match="confidence_level"):
+        paper_clustered_bootstrap_intervals(
+            [],
+            track="oracle-evidence",
+            confidence_level=1.0,
+        )

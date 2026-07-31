@@ -1,5 +1,158 @@
 # Development History
 
+## 2026-07-29. Deterministic Stage 3 comparison and attribution
+
+### Retrieval-first amendment
+
+- Added generation-free comparison of frozen retrieval contexts against oracle
+  evidence.
+- Ranked BM25, dense MiniLM, and hybrid MiniLM plus BM25 RRF on the same 930
+  cases. Hybrid won every registered selection metric and is frozen for
+  generation.
+- Added an OpenAI cost preflight with observed mean, observed p95, output
+  ceiling, retry exposure, current price provenance, and an optional hard budget
+  gate.
+- Revised Stage 3 so Qwen and GPT run only on the selected hybrid context.
+  GPT requires a pilot-derived estimate and explicit budget approval first.
+- Completed all 930 Qwen3-4B hybrid-context attempts with a `0.9677` valid rate,
+  `0.1938` token F1, `0.3655` citation F1, and `4.91` second p95 latency.
+- Attempted the bounded 25-case GPT-5 hybrid pilot. Every request returned
+  `429 insufficient_quota`, so the full API run remains blocked.
+- Approved a `$10` GPT-5 budget with a 768-token output cap and zero retries.
+  The conservative gate passes at `$8.36`, but a second bounded pilot still
+  returned only `429 insufficient_quota`.
+
+### Implemented
+
+- Added deterministic evidence Hit, best-reference Recall, Precision, MRR,
+  NDCG, and complete-reference-set availability from supplied context IDs.
+- Added a per-case primary failure taxonomy and a secondary retrieval-noise
+  indicator.
+- Added paired paper-clustered bootstrap differences and candidate win
+  probabilities for matched evaluated runs.
+- Added ordered eligibility intersections for shared cross-model retrieval
+  manifests.
+- Corrected oracle eligibility so answerable cases without resolved evidence are
+  counted and excluded instead of terminating the run.
+- Corrected resume behavior so every persisted attempt is skipped, preventing
+  interrupted primary runs from silently retrying invalid responses.
+- Corrected OpenAI cost reporting so missing price tables produce unavailable
+  cost values instead of false zero-cost claims.
+
+### Full validation
+
+The frozen Qwen3-4B and GPT-5 oracle, complete-paper, and dense retrieved-context
+validation runs use prompt v3, a 32,768-token context limit, a 1,024-token output
+limit, and the complete deterministic eligible sets. Generated artifacts remain
+under ignored `data/` and `results/` directories.
+
+Five of six metric artifacts are complete. GPT-5 API quota exhaustion produced
+135 oracle, 267 retrieved-context, and 415 complete-paper request errors, so the
+GPT-5 quality comparisons are non-selectable. The Qwen3-4B complete-paper run has
+127 unique first attempts persisted and requires a macOS restart after MLX
+entered an uninterruptible GPU-driver state. See
+`stage3_deterministic_report.md`.
+
+## 2026-07-29. Validation data provenance and protocol freeze
+
+### Implemented
+
+- Verified the cached immutable QASPER validation Parquet against SHA-256
+  `089781b91c337d348dd9e8b57cc8adc100ed2d9cab84a6127402bcccf1559222`.
+- Registered the source checksum in code and normalized-data manifests.
+- Confirmed that the complete normalized validation split contains 1,005 cases
+  with SHA-256
+  `e0172f79d2b17435b5c8c0aaa1ce9db76de0f6619772979a85f5a8c926f38c93`.
+- Added `generation_protocol_v1.json` to freeze the validation data, prompt,
+  context, generation, retrieval, metric, and held-out-test policies.
+- Added `--all-cases` to the oracle and lower-level fixed-context commands so
+  full validation runs do not depend on an implicit numeric sentinel.
+- Deferred the train split because prompt contract v3 is frozen and no active
+  prompt-development task requires it.
+
+### Threshold boundary
+
+The existing 25-case results are smoke baselines. They are not sufficient for
+numeric release thresholds. Quality, latency, and cost gates remain pending a
+full validation run and explicit product requirements. Integrity gates and the
+rule against inspecting held-out test outputs before the freeze are mandatory.
+
+## 2026-07-27. OpenAI Responses API generation provider
+
+### Implemented
+
+- Added a separate OpenAI Responses API adapter while retaining the local
+  OpenAI-compatible MLX adapter.
+- Added structured JSON output, explicit reasoning effort, disabled response
+  storage, retry accounting, usage extraction, and model-aware token counting.
+- Added `--provider openai`, OpenAI model, reasoning, API-key variable, and
+  environment-file options to generation commands.
+- Set `gpt-5` as the default and constrained the CLI to `gpt-5`,
+  `gpt-5.6-sol`, and `gpt-5.6-luna`.
+- Added `.env` protection, a safe `.env.example`, optional dependencies, tests,
+  and example generation and metric commands.
+
+## 2026-07-27. Task-oriented generation CLI
+
+### Implemented
+
+- Added `generate-oracle` for controlled generation from annotated evidence.
+- Added `generate-retrieved` for generation from an existing frozen retrieval
+  manifest without rerunning retrieval.
+- Added `generate-end-to-end` to retrieve, persist a checksummed context
+  manifest, and generate in one command.
+- Kept the lower-level `run` and `freeze-context` commands for compatibility and
+  experiment debugging.
+- Added task-specific defaults, help text, parser tests, and sample commands.
+
+## 2026-07-27. Matched prompt comparison and frozen retrieved context
+
+### Implemented
+
+- Aligned default Track A prediction and metric paths under one run ID.
+- Added matched response-validity comparison with a hard check for identical,
+  ordered eligible case IDs.
+- Added a dependency-free BM25 context freezer over normalized QASPER passages.
+- Recorded cases and eligibility checksums, retriever implementation and
+  parameters, top K, ordered case IDs, passage rankings, and scores.
+- Added the `retrieved-context` generation track, which requires the frozen
+  manifest and records its checksum in eligibility and prediction artifacts.
+- Extended answerability, abstention, calibration, and bootstrap metrics to the
+  retrieved-context track.
+- Added CLI commands, validation, and tests for the comparison and retrieval
+  workflow.
+
+### Observed local baseline
+
+- Track A prompt v2 completed 25 of 25 cases with valid responses.
+- Track B prompt v1 completed 11 of 25 cases with valid responses.
+- Track B prompt v2 completed 16 of 25 cases with valid responses on the same
+  ordered case IDs.
+
+## 2026-07-27. Paper-clustered bootstrap intervals, Stage 6
+
+### Implemented
+
+- Added deterministic paper-clustered bootstrap resampling with seed `42`.
+- Added 10,000-resample, two-sided 95 percent percentile intervals.
+- Resampled observed papers with replacement and retained every question from a
+  selected paper, preserving within-paper dependence.
+- Added intervals for answer token F1, normalized exact match, citation precision,
+  recall, F1, validity, and answered-with-citation rate on both tracks.
+- Added Track B intervals for answerability accuracy, abstention precision, recall,
+  F1, false-answer rate, false-abstention rate, expected calibration error, and
+  area under the risk-coverage curve.
+- Reported valid replicate counts for conditionally undefined metrics.
+- Persisted method, clustering unit, confidence level, resample count, seed, paper
+  count, and case count in `summary.json`.
+- Added tests proving fixed-seed determinism and whole-paper cluster behavior.
+
+### Scope boundary
+
+Stage 6 covers confidence intervals for one evaluated prediction file. Paired
+bootstrap intervals for direct model differences belong to the later comparison
+report workflow, which must join identical cases before resampling.
+
 ## 2026-07-27. Confidence calibration and risk-coverage, Stage 5
 
 ### Implemented

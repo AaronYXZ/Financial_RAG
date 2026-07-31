@@ -270,7 +270,7 @@ No retriever, embedding model, BM25 search, hybrid fusion, or reranker is called
 
 The frozen prompt contract is `qasper-generation-v2`, exposed through
 `PROMPT_VERSION` and `SYSTEM_PROMPT` from
-[`generation_prompt.py`](src/rag_eval/generation_prompt.py).
+[`prompt.py`](src/rag_eval/generation/prompt.py).
 
 `render_user_prompt()` serializes the selected passages as:
 
@@ -503,8 +503,8 @@ The console-script wrapper consumes that integer as the process exit status.
 - Context construction and token-count failures occur before the per-call error
   handler and currently stop the run.
 - The evaluator computes QASPER token F1, normalized exact match, citation evidence
-  overlap, Track B abstention, reliability, latency, and token summaries.
-  Calibration, confidence intervals, and judge scores remain future work.
+  overlap, Track B abstention and calibration, paper-clustered confidence
+  intervals, reliability, latency, and token summaries. Judge scores remain future work.
 
 ## 15. Source map
 
@@ -512,15 +512,23 @@ The console-script wrapper consumes that integer as the process exit status.
 |---|---|
 | Console entry point | [`pyproject.toml`](pyproject.toml) |
 | CLI parsing and dispatch | [`src/rag_eval/generation_cli.py`](src/rag_eval/generation_cli.py) |
-| Persisted case reconstruction | [`src/rag_eval/generation_data.py`](src/rag_eval/generation_data.py) |
-| Track-specific context | [`src/rag_eval/generation_context.py`](src/rag_eval/generation_context.py) |
-| Prompt rendering, hash, and validation | [`src/rag_eval/generation_prompt.py`](src/rag_eval/generation_prompt.py) |
-| Local HTTP and tokenizer adapter | [`src/rag_eval/generation_adapter.py`](src/rag_eval/generation_adapter.py) |
-| Case loop, eligibility, persistence, resume | [`src/rag_eval/generation_runner.py`](src/rag_eval/generation_runner.py) |
-| Stage 0 to 5 metrics | [`src/rag_eval/generation_metrics.py`](src/rag_eval/generation_metrics.py) |
+| Persisted case reconstruction | [`src/rag_eval/generation/data.py`](src/rag_eval/generation/data.py) |
+| Track-specific context | [`src/rag_eval/generation/context.py`](src/rag_eval/generation/context.py) |
+| Prompt rendering, hash, and validation | [`src/rag_eval/generation/prompt.py`](src/rag_eval/generation/prompt.py) |
+| Local HTTP and tokenizer adapter | [`src/rag_eval/generation/adapter.py`](src/rag_eval/generation/adapter.py) |
+| Case loop, eligibility, persistence, resume | [`src/rag_eval/generation/runner.py`](src/rag_eval/generation/runner.py) |
+| Deterministic generation metrics | [`src/rag_eval/generation/metrics.py`](src/rag_eval/generation/metrics.py) |
+| Retrieved-context and retrieve-then-generate orchestration | [`src/rag_eval/end_to_end/workflow.py`](src/rag_eval/end_to_end/workflow.py) |
+| Shared retrieval-versus-generation failure attribution | [`src/rag_eval/evaluation/attribution.py`](src/rag_eval/evaluation/attribution.py) |
+| Shared eligibility-manifest validation | [`src/rag_eval/evaluation/manifests.py`](src/rag_eval/evaluation/manifests.py) |
+| Blinded judge prompt, schema, and parsing contracts | [`src/rag_eval/semantic/contracts.py`](src/rag_eval/semantic/contracts.py) |
+| Semantic input preparation, execution, and aggregation | [`src/rag_eval/semantic/evaluation.py`](src/rag_eval/semantic/evaluation.py) |
+| Stable command façade | [`src/rag_eval/generation_cli.py`](src/rag_eval/generation_cli.py) |
+| Parser composition and shared provider options | [`src/rag_eval/cli/`](src/rag_eval/cli/) |
+| Domain command handlers | [`src/rag_eval/generation/cli.py`](src/rag_eval/generation/cli.py), [`src/rag_eval/retrieval/cli.py`](src/rag_eval/retrieval/cli.py), [`src/rag_eval/end_to_end/cli.py`](src/rag_eval/end_to_end/cli.py) |
 | Smoke-test command | [`README.md`](README.md) |
 
-## 16. Stage 0 to 5 metric execution
+## 16. Stage 0 to 6 metric execution
 
 Run metrics only after `rag-generation run` has created both the prediction JSONL
 and its eligibility sidecar:
@@ -545,11 +553,13 @@ flowchart LR
     Quality --> Citations["aggregate_citation_quality()"]
     Quality --> Abstention["aggregate_abstention_quality()"]
     Quality --> Confidence["aggregate_confidence_and_calibration()"]
+    Quality --> Bootstrap["paper_clustered_bootstrap_intervals()"]
     Reliability --> Summary["summary.json"]
     Aggregate --> Summary
     Citations --> Summary
     Abstention --> Summary
     Confidence --> Summary
+    Bootstrap --> Summary
     Join --> Records["evaluation_records.jsonl"]
     Quality --> PerCase["per_case_metrics.jsonl"]
 ```
@@ -578,7 +588,9 @@ The evaluator takes these steps:
     false-decision quality, or continuous answer token F1. Report confidence
     availability, ten-bin expected calibration error, and a tie-grouped
     risk-coverage curve with its discrete area.
-11. Write evaluation records, per-case scores, and the aggregate summary.
+11. Resample whole papers 10,000 times with fixed seed `42`, recompute applicable
+    quality aggregates, and attach two-sided 95 percent percentile intervals.
+12. Write evaluation records, per-case scores, and the aggregate summary.
 
 Invalid and missing predictions receive zero answer quality. They remain in the
 eligible-case denominator, which prevents failed calls from inflating the score.

@@ -2,5 +2,11 @@
 __pycache__/
 .pytest_cache/
 *.egg-info/
+.DS_Store
+.idea/
 data/
 results/
+.env
+.env.*
+!.env.example
+local_commands.md
