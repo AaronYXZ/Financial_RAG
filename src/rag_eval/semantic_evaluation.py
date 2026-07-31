@@ -8,9 +8,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from .generation_adapter import AdapterResult, GenerationRequestError
-from .generation_data import GenerationCase
-from .generation_metrics import load_generation_cases
-from .generation_retrieval import file_sha256, unique_passages
+from .generation_data import GenerationCase, load_generation_cases
+from .retrieval.context import file_sha256, unique_passages
 from .semantic_judge import (
     BLINDING_VERSION,
     SEMANTIC_OUTPUT_SCHEMA_VERSION,

@@ -17,7 +17,7 @@ from .generation_prompt import (
     prompt_hash,
     render_user_prompt,
 )
-from .generation_retrieval import unique_passages
+from .retrieval.context import unique_passages
 
 
 @dataclass(frozen=True)

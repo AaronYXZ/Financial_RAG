@@ -1,4 +1,4 @@
-"""Freeze retrieved QASPER passages before generation evaluation."""
+"""Retrieve QASPER passages and persist frozen context manifests."""
 
 from __future__ import annotations
 
@@ -8,12 +8,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping
 
-from .retrieval import (
-    PreparedBM25Retriever,
-    PreparedDenseRetriever,
-    reciprocal_rank_fusion,
-)
-from .generation_data import GenerationCase, PaperPassage
+from ..generation_data import GenerationCase, PaperPassage
+from .engines import PreparedBM25Retriever, PreparedDenseRetriever
+from .fusion import reciprocal_rank_fusion
 
 
 FROZEN_CONTEXT_SCHEMA_VERSION = 2

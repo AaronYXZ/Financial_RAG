@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
-from rag_eval.generation_retrieval_eval import compare_retrieval_to_oracle
+from rag_eval.retrieval.evaluation import compare_retrieval_to_oracle
 
 
 def _write_json(path: Path, value):

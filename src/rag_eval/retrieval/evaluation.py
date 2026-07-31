@@ -1,20 +1,17 @@
-"""Evaluate frozen QASPER retrieval contexts against oracle evidence before generation."""
+"""Evaluate frozen QASPER retrieval contexts against oracle evidence."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Sequence
 
-from .generation_metrics import (
-    aggregate_evidence_availability,
-    load_generation_cases,
-    score_ranked_evidence_ids,
-)
-from .generation_retrieval import (
+from ..generation_data import load_generation_cases
+from .context import (
     file_sha256,
     frozen_contexts_by_case,
     load_frozen_context_manifest,
 )
+from .metrics import aggregate_evidence_availability, score_ranked_evidence_ids
 
 
 SELECTION_METRICS = (

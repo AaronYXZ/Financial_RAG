@@ -23,7 +23,7 @@ from .generation_comparison import (
 )
 from .generation_metrics import evaluate_prediction_files, load_eligibility_manifest
 from .generation_runner import eligibility_manifest_path, run_generation_cases
-from .generation_retrieval import (
+from .retrieval.context import (
     DENSE_MODEL_1,
     DENSE_MODEL_2,
     file_sha256,
@@ -33,7 +33,7 @@ from .generation_retrieval import (
     retriever_manifest,
     write_frozen_context_manifest,
 )
-from .generation_retrieval_eval import compare_retrieval_to_oracle
+from .retrieval.evaluation import compare_retrieval_to_oracle
 
 from .generation_data import (
     QASPER_DATASET,

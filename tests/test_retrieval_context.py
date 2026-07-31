@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pytest
 
-import rag_eval.generation_retrieval as generation_retrieval
 from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
-from rag_eval.generation_retrieval import (
+import rag_eval.retrieval.context as retrieval_context
+from rag_eval.retrieval import SearchResult
+from rag_eval.retrieval.context import (
     freeze_bm25_contexts,
     freeze_retrieved_contexts,
     frozen_contexts_by_case,
@@ -13,7 +14,6 @@ from rag_eval.generation_retrieval import (
     retriever_manifest,
     write_frozen_context_manifest,
 )
-from rag_eval.retrieval import SearchResult
 
 
 PASSAGES = (
@@ -120,7 +120,7 @@ def test_dense_and_hybrid_use_the_selected_model(monkeypatch):
             )
 
     monkeypatch.setattr(
-        generation_retrieval,
+        retrieval_context,
         "PreparedDenseRetriever",
         FakeDenseRetriever,
     )

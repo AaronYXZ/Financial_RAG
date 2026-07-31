@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import quote
 
@@ -360,3 +362,20 @@ def generation_case_from_dict(payload: Mapping[str, Any]) -> GenerationCase:
         oracle_passage_ids=tuple(payload["oracle_passage_ids"]),
         references=references,
     )
+
+
+def load_generation_cases(path: Path) -> dict[str, GenerationCase]:
+    """Load normalized QASPER cases and reject duplicate case IDs."""
+
+    cases: dict[str, GenerationCase] = {}
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            case = generation_case_from_dict(json.loads(line))
+            if case.case_id in cases:
+                raise ValueError(
+                    f"Duplicate case ID {case.case_id!r} at line {line_number}"
+                )
+            cases[case.case_id] = case
+    return cases
