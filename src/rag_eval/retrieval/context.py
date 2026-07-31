@@ -8,7 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping
 
-from ..generation_data import GenerationCase, PaperPassage
+from ..generation.data import GenerationCase, PaperPassage
 from .engines import PreparedBM25Retriever, PreparedDenseRetriever
 from .fusion import reciprocal_rank_fusion
 

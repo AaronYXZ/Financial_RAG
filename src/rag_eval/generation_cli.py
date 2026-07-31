@@ -9,20 +9,20 @@ from collections import Counter
 from pathlib import Path
 from typing import Sequence
 
-from .generation_adapter import (
+from .generation.adapter import (
     OpenAICompatibleAdapter,
     OpenAIResponsesAdapter,
     OpenRouterChatAdapter,
 )
-from .generation_cost import estimate_openai_cost
-from .generation_comparison import (
+from .generation.cost import estimate_openai_cost
+from .generation.comparison import (
     compare_evaluated_runs,
     compare_response_validity,
     intersect_eligibility_manifests,
     write_comparison,
 )
-from .generation_metrics import evaluate_prediction_files, load_eligibility_manifest
-from .generation_runner import eligibility_manifest_path, run_generation_cases
+from .generation.metrics import evaluate_prediction_files, load_eligibility_manifest
+from .generation.runner import eligibility_manifest_path, run_generation_cases
 from .retrieval.context import (
     DENSE_MODEL_1,
     DENSE_MODEL_2,
@@ -35,7 +35,7 @@ from .retrieval.context import (
 )
 from .retrieval.evaluation import compare_retrieval_to_oracle
 
-from .generation_data import (
+from .generation.data import (
     QASPER_DATASET,
     QASPER_PARQUET_REVISION,
     QASPER_VERSION,

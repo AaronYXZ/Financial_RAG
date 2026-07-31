@@ -1,7 +1,7 @@
 import pytest
 
-from rag_eval.generation_context import build_fixed_context
-from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
+from rag_eval.generation.context import build_fixed_context
+from rag_eval.generation.data import GenerationCase, PaperPassage, ReferenceAnswer
 
 
 PASSAGES = (

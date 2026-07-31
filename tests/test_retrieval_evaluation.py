@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
+from rag_eval.generation.data import GenerationCase, PaperPassage, ReferenceAnswer
 from rag_eval.retrieval.evaluation import compare_retrieval_to_oracle
 
 

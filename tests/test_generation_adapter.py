@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from rag_eval.generation_adapter import (
+from rag_eval.generation.adapter import (
     GenerationRequestError,
     OpenAICompatibleAdapter,
     OpenAIResponsesAdapter,

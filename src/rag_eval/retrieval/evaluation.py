@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Sequence
 
-from ..generation_data import load_generation_cases
+from ..generation.data import load_generation_cases
 from .context import (
     file_sha256,
     frozen_contexts_by_case,

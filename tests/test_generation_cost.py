@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from rag_eval.generation_cost import estimate_openai_cost
+from rag_eval.generation.cost import estimate_openai_cost
 
 
 def _write_rows(path: Path):

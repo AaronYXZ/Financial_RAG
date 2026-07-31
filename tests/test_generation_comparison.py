@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from rag_eval.generation_comparison import (
+from rag_eval.generation.comparison import (
     compare_evaluated_runs,
     compare_response_validity,
     intersect_eligibility_manifests,

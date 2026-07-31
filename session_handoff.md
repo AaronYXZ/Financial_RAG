@@ -293,8 +293,8 @@ quota-confounded and non-selectable. The held-out test remains untouched.
 - `benchmark_spec.md`. Frozen QASPER evaluation policy and implementation checklist.
 - `generation_smoke_test_execution.md`. End-to-end runner and metric flow.
 - `dev_history.md`. Chronological implementation decisions.
-- `src/rag_eval/generation_runner.py`. Eligibility, execution, persistence, and
+- `src/rag_eval/generation/runner.py`. Eligibility, execution, persistence, and
   resume.
-- `src/rag_eval/generation_prompt.py`. Prompt v2 and response validation.
-- `src/rag_eval/generation_metrics.py`. Stages 0 to 6 metric implementation.
+- `src/rag_eval/generation/prompt.py`. Prompt v2 and response validation.
+- `src/rag_eval/generation/metrics.py`. Deterministic generation metrics.
 - `tests/test_generation_metrics.py`. Deterministic metric and bootstrap tests.

@@ -1,4 +1,4 @@
-"""Frozen prompt and strict response contract for Phase 3 generation."""
+"""Frozen prompt and strict response contract for component generation."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
-from .generation_data import PaperPassage
+from .data import PaperPassage
 
 
 PROMPT_VERSION = "qasper-generation-v3"

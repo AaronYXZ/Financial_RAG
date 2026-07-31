@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from .generation_adapter import OpenAIResponsesAdapter, OpenRouterChatAdapter
+from .generation.adapter import OpenAIResponsesAdapter, OpenRouterChatAdapter
 from .semantic_evaluation import (
     aggregate_semantic_judgments,
     prepare_blinded_semantic_inputs,

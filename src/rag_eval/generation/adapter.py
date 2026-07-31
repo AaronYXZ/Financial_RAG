@@ -1,4 +1,4 @@
-"""Generation adapters for local, OpenAI, and OpenRouter model providers."""
+"""Model-provider adapters for component generation."""
 
 from __future__ import annotations
 

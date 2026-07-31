@@ -7,17 +7,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping
 
-from .generation_adapter import GenerationAdapter
-from .generation_context import ContextTrack, build_fixed_context
-from .generation_data import GenerationCase, PaperPassage
-from .generation_prompt import (
+from .adapter import GenerationAdapter
+from .context import ContextTrack, build_fixed_context
+from .data import GenerationCase, PaperPassage
+from .prompt import (
     PROMPT_VERSION,
     SYSTEM_PROMPT,
     parse_generation_response,
     prompt_hash,
     render_user_prompt,
 )
-from .retrieval.context import unique_passages
+from ..retrieval.context import unique_passages
 
 
 @dataclass(frozen=True)

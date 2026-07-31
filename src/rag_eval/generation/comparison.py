@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .generation_metrics import (
+from .metrics import (
     BOOTSTRAP_CONFIDENCE_LEVEL,
     BOOTSTRAP_RESAMPLES,
     BOOTSTRAP_SEED,

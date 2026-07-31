@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from rag_eval.generation_adapter import AdapterResult
-from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
+from rag_eval.generation.adapter import AdapterResult
+from rag_eval.generation.data import GenerationCase, PaperPassage, ReferenceAnswer
 from rag_eval.semantic_evaluation import (
     aggregate_semantic_judgments,
     load_blinded_semantic_inputs,

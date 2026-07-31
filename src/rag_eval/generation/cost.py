@@ -1,4 +1,4 @@
-"""Preflight OpenAI generation cost estimates from a pilot prediction artifact."""
+"""Preflight generation cost estimates from pilot prediction artifacts."""
 
 from __future__ import annotations
 

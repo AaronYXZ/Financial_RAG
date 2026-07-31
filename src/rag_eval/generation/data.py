@@ -1,4 +1,4 @@
-"""QASPER normalization for fixed-context generation experiments."""
+"""QASPER data contracts for component-generation experiments."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-from rag_eval.generation_data import (
+from rag_eval.generation.data import (
     QASPER_PARQUET_REVISION,
     generation_case_from_dict,
     normalize_qasper_row,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Literal
 
-from .generation_data import GenerationCase, PaperPassage, select_passages
+from .data import GenerationCase, PaperPassage, select_passages
 
 
 ContextTrack = Literal["oracle-evidence", "complete-paper", "retrieved-context"]

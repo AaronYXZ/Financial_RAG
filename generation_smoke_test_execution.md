@@ -270,7 +270,7 @@ No retriever, embedding model, BM25 search, hybrid fusion, or reranker is called
 
 The frozen prompt contract is `qasper-generation-v2`, exposed through
 `PROMPT_VERSION` and `SYSTEM_PROMPT` from
-[`generation_prompt.py`](src/rag_eval/generation_prompt.py).
+[`prompt.py`](src/rag_eval/generation/prompt.py).
 
 `render_user_prompt()` serializes the selected passages as:
 
@@ -512,12 +512,12 @@ The console-script wrapper consumes that integer as the process exit status.
 |---|---|
 | Console entry point | [`pyproject.toml`](pyproject.toml) |
 | CLI parsing and dispatch | [`src/rag_eval/generation_cli.py`](src/rag_eval/generation_cli.py) |
-| Persisted case reconstruction | [`src/rag_eval/generation_data.py`](src/rag_eval/generation_data.py) |
-| Track-specific context | [`src/rag_eval/generation_context.py`](src/rag_eval/generation_context.py) |
-| Prompt rendering, hash, and validation | [`src/rag_eval/generation_prompt.py`](src/rag_eval/generation_prompt.py) |
-| Local HTTP and tokenizer adapter | [`src/rag_eval/generation_adapter.py`](src/rag_eval/generation_adapter.py) |
-| Case loop, eligibility, persistence, resume | [`src/rag_eval/generation_runner.py`](src/rag_eval/generation_runner.py) |
-| Stage 0 to 6 metrics | [`src/rag_eval/generation_metrics.py`](src/rag_eval/generation_metrics.py) |
+| Persisted case reconstruction | [`src/rag_eval/generation/data.py`](src/rag_eval/generation/data.py) |
+| Track-specific context | [`src/rag_eval/generation/context.py`](src/rag_eval/generation/context.py) |
+| Prompt rendering, hash, and validation | [`src/rag_eval/generation/prompt.py`](src/rag_eval/generation/prompt.py) |
+| Local HTTP and tokenizer adapter | [`src/rag_eval/generation/adapter.py`](src/rag_eval/generation/adapter.py) |
+| Case loop, eligibility, persistence, resume | [`src/rag_eval/generation/runner.py`](src/rag_eval/generation/runner.py) |
+| Deterministic generation metrics | [`src/rag_eval/generation/metrics.py`](src/rag_eval/generation/metrics.py) |
 | Smoke-test command | [`README.md`](README.md) |
 
 ## 16. Stage 0 to 6 metric execution

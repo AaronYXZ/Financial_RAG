@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
-from rag_eval.generation_metrics import (
+from rag_eval.generation.data import GenerationCase, PaperPassage, ReferenceAnswer
+from rag_eval.generation.metrics import (
     EvaluationRecord,
     aggregate_abstention_quality,
     aggregate_answer_quality,

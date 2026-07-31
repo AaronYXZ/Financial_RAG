@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from rag_eval.generation_adapter import AdapterResult
-from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
-from rag_eval.generation_prompt import PROMPT_VERSION
-from rag_eval.generation_runner import eligibility_manifest_path, run_generation_cases
+from rag_eval.generation.adapter import AdapterResult
+from rag_eval.generation.data import GenerationCase, PaperPassage, ReferenceAnswer
+from rag_eval.generation.prompt import PROMPT_VERSION
+from rag_eval.generation.runner import eligibility_manifest_path, run_generation_cases
 
 
 class FakeAdapter:

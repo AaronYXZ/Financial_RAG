@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from rag_eval.generation_data import PaperPassage
-from rag_eval.generation_prompt import (
+from rag_eval.generation.data import PaperPassage
+from rag_eval.generation.prompt import (
     PROMPT_VERSION,
     RESPONSE_CONTRACT,
     SYSTEM_PROMPT,

@@ -1,4 +1,4 @@
-"""Stage 0-6 evaluation for fixed-context QASPER generation runs."""
+"""Deterministic evaluation for fixed-context QASPER generation runs."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from .generation_data import GenerationCase, ReferenceAnswer, load_generation_cases
-from .retrieval.metrics import (
+from .data import GenerationCase, ReferenceAnswer, load_generation_cases
+from ..retrieval.metrics import (
     aggregate_evidence_availability,
     score_ranked_evidence_ids,
 )
