@@ -1,4 +1,4 @@
-"""Blinded prompts and strict response parsing for semantic evaluation."""
+"""Blinding, prompts, schemas, and strict semantic-judgment parsing."""
 
 from __future__ import annotations
 

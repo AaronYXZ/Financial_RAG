@@ -5,7 +5,7 @@ import pytest
 
 from rag_eval.generation.adapter import AdapterResult
 from rag_eval.generation.data import GenerationCase, PaperPassage, ReferenceAnswer
-from rag_eval.semantic_evaluation import (
+from rag_eval.semantic.evaluation import (
     aggregate_semantic_judgments,
     load_blinded_semantic_inputs,
     prepare_blinded_semantic_inputs,

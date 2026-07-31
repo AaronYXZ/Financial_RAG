@@ -520,6 +520,8 @@ The console-script wrapper consumes that integer as the process exit status.
 | Deterministic generation metrics | [`src/rag_eval/generation/metrics.py`](src/rag_eval/generation/metrics.py) |
 | Retrieved-context and retrieve-then-generate orchestration | [`src/rag_eval/end_to_end/workflow.py`](src/rag_eval/end_to_end/workflow.py) |
 | Retrieval-versus-generation failure attribution | [`src/rag_eval/end_to_end/attribution.py`](src/rag_eval/end_to_end/attribution.py) |
+| Blinded judge prompt, schema, and parsing contracts | [`src/rag_eval/semantic/contracts.py`](src/rag_eval/semantic/contracts.py) |
+| Semantic input preparation, execution, and aggregation | [`src/rag_eval/semantic/evaluation.py`](src/rag_eval/semantic/evaluation.py) |
 | Smoke-test command | [`README.md`](README.md) |
 
 ## 16. Stage 0 to 6 metric execution

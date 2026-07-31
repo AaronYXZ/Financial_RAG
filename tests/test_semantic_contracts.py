@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from rag_eval.semantic_judge import (
+from rag_eval.semantic.contracts import (
     SEMANTIC_PROMPT_VERSION,
     parse_semantic_judgment,
     render_semantic_user_prompt,

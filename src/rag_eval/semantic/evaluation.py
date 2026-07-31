@@ -7,10 +7,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
-from .generation.adapter import AdapterResult, GenerationRequestError
-from .generation.data import GenerationCase, load_generation_cases
-from .retrieval.context import file_sha256, unique_passages
-from .semantic_judge import (
+from ..generation.adapter import AdapterResult, GenerationRequestError
+from ..generation.data import GenerationCase, load_generation_cases
+from ..retrieval.context import file_sha256, unique_passages
+from .contracts import (
     BLINDING_VERSION,
     SEMANTIC_OUTPUT_SCHEMA_VERSION,
     SEMANTIC_PARSING_POLICY,

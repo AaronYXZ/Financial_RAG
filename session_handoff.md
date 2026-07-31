@@ -301,4 +301,8 @@ quota-confounded and non-selectable. The held-out test remains untouched.
   workflow composition.
 - `src/rag_eval/end_to_end/attribution.py`. Deterministic retrieval-versus-
   generation failure attribution.
+- `src/rag_eval/semantic/contracts.py`. Blinded judge prompt, schema, hashing,
+  and parsing contracts.
+- `src/rag_eval/semantic/evaluation.py`. Semantic input preparation, execution,
+  persistence, and aggregation.
 - `tests/test_generation_metrics.py`. Deterministic metric and bootstrap tests.

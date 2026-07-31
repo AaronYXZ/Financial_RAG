@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Sequence
 
 from .generation.adapter import OpenAIResponsesAdapter, OpenRouterChatAdapter
-from .semantic_evaluation import (
+from .semantic.evaluation import (
     aggregate_semantic_judgments,
     prepare_blinded_semantic_inputs,
     run_semantic_judgments,
 )
-from .semantic_judge import SEMANTIC_RESPONSE_SCHEMA
+from .semantic.contracts import SEMANTIC_RESPONSE_SCHEMA
 
 
 DEFAULT_OPENROUTER_JUDGE = "anthropic/claude-sonnet-4.5"
