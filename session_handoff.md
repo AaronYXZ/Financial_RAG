@@ -305,4 +305,9 @@ quota-confounded and non-selectable. The held-out test remains untouched.
   and parsing contracts.
 - `src/rag_eval/semantic/evaluation.py`. Semantic input preparation, execution,
   persistence, and aggregation.
+- `src/rag_eval/generation_cli.py`. Stable `rag-generation` compatibility
+  façade.
+- `src/rag_eval/cli/`. Parser composition and shared provider options.
+- `src/rag_eval/generation/cli.py`, `src/rag_eval/retrieval/cli.py`, and
+  `src/rag_eval/end_to_end/cli.py`. Domain-specific command handlers.
 - `tests/test_generation_metrics.py`. Deterministic metric and bootstrap tests.

@@ -522,6 +522,9 @@ The console-script wrapper consumes that integer as the process exit status.
 | Retrieval-versus-generation failure attribution | [`src/rag_eval/end_to_end/attribution.py`](src/rag_eval/end_to_end/attribution.py) |
 | Blinded judge prompt, schema, and parsing contracts | [`src/rag_eval/semantic/contracts.py`](src/rag_eval/semantic/contracts.py) |
 | Semantic input preparation, execution, and aggregation | [`src/rag_eval/semantic/evaluation.py`](src/rag_eval/semantic/evaluation.py) |
+| Stable command façade | [`src/rag_eval/generation_cli.py`](src/rag_eval/generation_cli.py) |
+| Parser composition and shared provider options | [`src/rag_eval/cli/`](src/rag_eval/cli/) |
+| Domain command handlers | [`src/rag_eval/generation/cli.py`](src/rag_eval/generation/cli.py), [`src/rag_eval/retrieval/cli.py`](src/rag_eval/retrieval/cli.py), [`src/rag_eval/end_to_end/cli.py`](src/rag_eval/end_to_end/cli.py) |
 | Smoke-test command | [`README.md`](README.md) |
 
 ## 16. Stage 0 to 6 metric execution

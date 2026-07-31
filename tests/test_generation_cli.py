@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 import rag_eval.generation_cli as generation_cli
+import rag_eval.end_to_end.cli as end_to_end_cli
+import rag_eval.generation.cli as generation_commands
 from rag_eval.generation_cli import build_parser
 
 
@@ -33,7 +35,11 @@ def test_prepare_records_registered_source_checksum(
     monkeypatch,
     tmp_path: Path,
 ):
-    monkeypatch.setattr(generation_cli, "load_qasper_cases", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        generation_commands,
+        "load_qasper_cases",
+        lambda *args, **kwargs: [],
+    )
     args = Namespace(
         split="validation",
         cache_dir=None,
@@ -42,7 +48,7 @@ def test_prepare_records_registered_source_checksum(
         output_dir=str(tmp_path),
     )
 
-    assert generation_cli._prepare(args) == 0
+    assert generation_commands._prepare(args) == 0
 
     manifest = json.loads((tmp_path / "validation.manifest.json").read_text())
     assert manifest["schema_version"] == 2
@@ -168,7 +174,7 @@ def test_openai_reasoning_effort_is_validated_for_selected_model(tmp_path: Path)
     (tmp_path / "cases.jsonl").write_text("")
 
     with pytest.raises(ValueError, match="gpt-5 supports reasoning efforts"):
-        generation_cli._generate_oracle(args)
+        generation_commands._generate_oracle(args)
 
 
 def test_generation_metrics_defaults_to_smoke_test_artifacts():
@@ -379,10 +385,14 @@ def test_end_to_end_handler_passes_new_manifest_to_generation(
         )
 
     adapter = object()
-    monkeypatch.setattr(generation_cli, "_build_adapter", lambda received: adapter)
-    monkeypatch.setattr(generation_cli, "run_retrieve_then_generate", fake_workflow)
+    monkeypatch.setattr(end_to_end_cli, "_build_adapter", lambda received: adapter)
+    monkeypatch.setattr(
+        end_to_end_cli,
+        "run_retrieve_then_generate",
+        fake_workflow,
+    )
 
-    assert generation_cli._generate_end_to_end(args) == 0
+    assert end_to_end_cli._generate_end_to_end(args) == 0
     assert calls[0]["adapter"] is adapter
     assert calls[0]["context_manifest_file"] == context_manifest
     assert calls[0]["top_k"] == 7
