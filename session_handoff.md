@@ -5,12 +5,11 @@
 Build a reproducible RAG benchmark that attributes failures to retrieval,
 generation, or the complete pipeline.
 
-The project currently has two major benchmark areas:
+The project now uses QASPER across three diagnostic layers:
 
-1. SciDocs retrieval evaluation with fixed and recursive LangChain chunking,
-   lexical BM25, dense, and hybrid retrieval.
-2. QASPER fixed-context generation evaluation using a locally served Qwen3-4B
-   model.
+1. Passage retrieval against annotated evidence.
+2. Fixed-context generation with oracle evidence or the complete paper.
+3. Retrieved-context generation on a frozen retrieval manifest.
 
 For generation, the current strategic recommendation is:
 
@@ -28,19 +27,6 @@ when sufficient evidence is supplied. It does not test retrieval noise or missin
 evidence, so it should not be the only basis for an end-to-end RAG claim.
 
 ## Work completed
-
-### Retrieval benchmark
-
-- Added the SciDocs benchmark specification.
-- Implemented dataset handling and experiment runners.
-- Implemented fixed and recursive LangChain chunking.
-- Implemented BM25, dense, and hybrid retrieval.
-- Implemented Precision@K, Recall@K, MRR@K, and NDCG@K.
-- Added ranking artifacts, timing, and retrieval experiment support.
-
-Relevant commit:
-
-- `87252c6 Implement SciDocs retrieval benchmark`
 
 ### QASPER generation foundation
 
@@ -275,10 +261,8 @@ and `.idea/` are ignored.
    returned only `429 insufficient_quota`, so API billing or credits must be
    restored before retrying.
 4. [ ] Compare Qwen3-4B and GPT-5 generation on identical hybrid-retrieval cases.
-5. [x] Run the six registered SciDocs retrieval configurations and
-   whole-document BM25 control.
-6. [x] Add paired paper-clustered bootstrap differences for matched systems.
-7. [x] Report deterministic evidence availability and the complete primary
+5. [x] Add paired paper-clustered bootstrap differences for matched systems.
+6. [x] Report deterministic evidence availability and the complete primary
    retrieval-versus-generation failure taxonomy.
 
 The Stage 3 implementation and current results are summarized in
@@ -300,13 +284,13 @@ quota-confounded and non-selectable. The held-out test remains untouched.
 1. Freeze the complete protocol and acceptance thresholds.
 2. Run the held-out test comparison once.
 3. Complete retrieval and generation error analyses.
-4. Publish the Phase 2 retrieval report and Phase 3 generation and end-to-end
+4. Publish the retrieval-component, generation-component, and end-to-end
    report.
 
 ## Key files
 
 - `README.md`. User-facing commands and current benchmark status.
-- `benchmark_spec.md`. Frozen evaluation policy and implementation checklist.
+- `benchmark_spec.md`. Frozen QASPER evaluation policy and implementation checklist.
 - `generation_smoke_test_execution.md`. End-to-end runner and metric flow.
 - `dev_history.md`. Chronological implementation decisions.
 - `src/rag_eval/generation_runner.py`. Eligibility, execution, persistence, and

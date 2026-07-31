@@ -8,7 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping
 
-from .benchmark_retrievers import (
+from .retrieval import (
     PreparedBM25Retriever,
     PreparedDenseRetriever,
     reciprocal_rank_fusion,
@@ -223,9 +223,9 @@ def retriever_manifest(
         "top_k": top_k,
     }
     implementations = {
-        "bm25": "rag_eval.benchmark_retrievers.PreparedBM25Retriever",
-        "dense": "rag_eval.benchmark_retrievers.PreparedDenseRetriever",
-        "hybrid": "rag_eval.benchmark_retrievers.reciprocal_rank_fusion",
+        "bm25": "rag_eval.retrieval.PreparedBM25Retriever",
+        "dense": "rag_eval.retrieval.PreparedDenseRetriever",
+        "hybrid": "rag_eval.retrieval.reciprocal_rank_fusion",
     }
     if method in ("bm25", "hybrid"):
         parameters.update({"k1": 1.5, "b": 0.75})

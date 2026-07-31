@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 
 import rag_eval.generation_retrieval as generation_retrieval
-from rag_eval.benchmark_retrievers import SearchResult
 from rag_eval.generation_data import GenerationCase, PaperPassage, ReferenceAnswer
 from rag_eval.generation_retrieval import (
     freeze_bm25_contexts,
@@ -14,6 +13,7 @@ from rag_eval.generation_retrieval import (
     retriever_manifest,
     write_frozen_context_manifest,
 )
+from rag_eval.retrieval import SearchResult
 
 
 PASSAGES = (

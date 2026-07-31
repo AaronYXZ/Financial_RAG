@@ -113,20 +113,6 @@ rate was `-0.2548`, with a 95 percent interval of
 `[-0.3161, -0.1959]`. These differences are quota-confounded and are not model
 selection evidence.
 
-## SciDocs whole-document control
-
-The full-corpus whole-document BM25 diagnostic used 25,657 documents, 1,000
-queries, and 4,928 positive judgments:
-
-- Recall@5: `0.10618`
-- MRR@5: `0.24757`
-- Precision@5: `0.10480`
-- NDCG@5: `0.12116`
-- p95 query latency: `32.4975 ms`
-
-The best registered chunked primary result remains fixed-chunk dense retrieval,
-with Recall@5 `0.15753`, MRR@5 `0.33928`, and p95 latency `4.8559 ms`.
-
 ## Release decision
 
 Stage 3 supplies deterministic diagnostic evidence, but numeric promotion

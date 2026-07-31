@@ -32,7 +32,6 @@
   probabilities for matched evaluated runs.
 - Added ordered eligibility intersections for shared cross-model retrieval
   manifests.
-- Added the full-corpus SciDocs whole-document BM25 diagnostic.
 - Corrected oracle eligibility so answerable cases without resolved evidence are
   counted and excluded instead of terminating the run.
 - Corrected resume behavior so every persisted attempt is skipped, preventing

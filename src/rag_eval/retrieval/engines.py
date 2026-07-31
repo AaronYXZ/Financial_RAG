@@ -1,19 +1,31 @@
-"""Prepared retrievers and document-level aggregation for chunk benchmarks."""
+"""Prepared lexical and dense retrieval engines."""
 
 from __future__ import annotations
 
 import math
+import re
 import sys
 import time
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from rag_eval.retrievers import Corpus, Queries, Run, tokenize
+Corpus = Mapping[str, Mapping[str, str]]
+Queries = Mapping[str, str]
+Run = dict[str, dict[str, float]]
+
+
+def tokenize(text: str) -> list[str]:
+    """Normalize text into Unicode word tokens."""
+
+    return re.findall(r"[\w]+", text.casefold(), flags=re.UNICODE)
 
 
 @dataclass(frozen=True)
 class SearchResult:
+    """Ranked results and measured latency for each query."""
+
     run: Run
     query_latencies_ms: tuple[float, ...]
 
@@ -103,8 +115,8 @@ class PreparedDenseRetriever:
             from sentence_transformers import SentenceTransformer
         except ImportError as error:
             raise RuntimeError(
-                "Dense retrieval requires benchmark dependencies. "
-                "Install them with: pip install -e '.[benchmark]'"
+                "Dense retrieval requires retrieval dependencies. "
+                "Install them with: pip install -e '.[retrieval]'"
             ) from error
 
         self.np = np
@@ -154,59 +166,3 @@ class PreparedDenseRetriever:
     @property
     def index_size_bytes(self) -> int:
         return int(self.np.asarray(self.document_embeddings).nbytes)
-
-
-def collapse_to_parents(
-    chunk_run: Run,
-    parent_by_chunk: dict[str, str],
-    top_k: int,
-) -> tuple[Run, dict[str, dict[str, str]]]:
-    """Collapse chunk rankings by maximum score and retain the winning chunk."""
-    parent_run: Run = {}
-    winners: dict[str, dict[str, str]] = {}
-    for query_id, chunk_scores in chunk_run.items():
-        best: dict[str, tuple[float, str]] = {}
-        for chunk_id, score in chunk_scores.items():
-            parent_id = parent_by_chunk[chunk_id]
-            previous = best.get(parent_id)
-            candidate = (score, chunk_id)
-            if previous is None or candidate[0] > previous[0] or (
-                candidate[0] == previous[0] and candidate[1] < previous[1]
-            ):
-                best[parent_id] = candidate
-        ranked = sorted(best.items(), key=lambda item: (-item[1][0], item[0]))[:top_k]
-        parent_run[query_id] = {
-            parent_id: score_and_chunk[0]
-            for parent_id, score_and_chunk in ranked
-        }
-        winners[query_id] = {
-            parent_id: score_and_chunk[1]
-            for parent_id, score_and_chunk in ranked
-        }
-    return parent_run, winners
-
-
-def reciprocal_rank_fusion(
-    lexical_run: Run,
-    dense_run: Run,
-    top_k: int,
-    rrf_k: int = 60,
-) -> tuple[Run, tuple[float, ...]]:
-    """Fuse two parent-document rankings and return per-query fusion latency."""
-    fused: Run = {}
-    latencies: list[float] = []
-    query_ids = list(dict.fromkeys([*lexical_run, *dense_run]))
-    for query_id in query_ids:
-        started = time.perf_counter()
-        scores: defaultdict[str, float] = defaultdict(float)
-        for run in (lexical_run, dense_run):
-            ranked_ids = sorted(
-                run.get(query_id, {}),
-                key=lambda doc_id: (-run[query_id][doc_id], doc_id),
-            )
-            for rank, doc_id in enumerate(ranked_ids, start=1):
-                scores[doc_id] += 1 / (rrf_k + rank)
-        ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
-        fused[query_id] = dict(ranked[:top_k])
-        latencies.append((time.perf_counter() - started) * 1000)
-    return fused, tuple(latencies)

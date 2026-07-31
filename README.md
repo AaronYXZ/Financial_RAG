@@ -1,26 +1,19 @@
-# Local RAG Retrieval Eval
+# Local QASPER RAG Evaluation
 
-A small evaluation harness inspired by [BEIR](https://github.com/beir-cellar/beir).
-It downloads a standard BEIR dataset, runs retrieval, compares ranked documents
-with qrels, and records reproducible experiment results.
+A reproducible evaluation harness for a QASPER-based RAG pipeline. It keeps
+retrieval, fixed-context generation, and retrieved-context generation separate
+so a weak final answer can be attributed to missing evidence or generator
+behavior.
 
-The initial scope is retrieval evaluation. It deliberately separates retrieval
-quality from LLM answer quality so you can diagnose the first stage before adding
-generation and judge-based metrics.
+## Evaluation tracks
 
-## What it measures
-
-- Precision@K
-- Recall@K
-- MRR@K
-- nDCG@K with graded relevance
-- Total retrieval latency and latency per query
-
-Supported retrieval methods:
-
-- `bm25`: dependency-free lexical baseline
-- `dense`: exact cosine search with a sentence-transformers model
-- `hybrid`: BM25 plus dense search using reciprocal rank fusion
+- Retrieval component: compare BM25, dense, and hybrid passage retrieval against
+  QASPER evidence annotations.
+- Generation component: compare generators with identical oracle evidence or
+  complete-paper context.
+- End to end: compare generators with one frozen retrieved-context manifest.
+- Semantic judgment: measure claim support, citation entailment, faithfulness,
+  correctness, and completeness using blinded judge inputs.
 
 ## Quick start
 
@@ -29,58 +22,9 @@ Python 3.10 or newer is required.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
-
-# Small, fast BM25 learning run
-rag-eval \
-  --dataset scifact \
-  --retriever bm25 \
-  --max-documents 2000 \
-  --max-queries 100 \
-  --k 1,3,5,10
+pip install -e ".[generation,retrieval,dev]"
+pytest
 ```
-
-The first run downloads the public BEIR archive into `data/`. Reports are written
-to `results/<experiment-id>.json`, and each run is appended to
-`results/experiments.csv`.
-
-To compare dense and hybrid retrieval:
-
-```bash
-pip install -e ".[dense]"
-
-rag-eval --dataset scifact --retriever dense --max-documents 2000 --max-queries 100
-rag-eval --dataset scifact --retriever hybrid --max-documents 2000 --max-queries 100
-```
-
-The default dense model is `sentence-transformers/all-MiniLM-L6-v2`. Override it
-with `--model`.
-
-## SciDocs chunking benchmark
-
-Install the benchmark dependencies and download SciDocs:
-
-```bash
-pip install -e ".[benchmark]"
-rag-benchmark --download-only
-```
-
-Run a small smoke experiment before the full matrix:
-
-```bash
-rag-benchmark --max-documents 2000 --max-queries 25 --repetitions 1 --k 1,3,5,10
-```
-
-Run the reportable fixed-versus-recursive matrix on the full corpus:
-
-```bash
-rag-benchmark
-```
-
-The runner builds fixed and recursive LangChain chunks, evaluates BM25, dense,
-and hybrid RRF retrieval, collapses chunk scores to SciDocs parent documents, and
-writes chunk manifests, rankings, per-run metrics, timing, and a CSV summary under
-`results/scidocs/<session-id>/`.
 
 ## QASPER generation benchmark
 
@@ -660,49 +604,6 @@ source of truth. Ragas is not used in this implementation because the frozen
 protocol requires explicit three-way claim labels and passage-level anonymous
 citation judgments that its standard metrics do not directly preserve.
 
-## Evaluation design
-
-
-BEIR datasets have three important pieces:
-
-```text
-corpus.jsonl        documents to search
-queries.jsonl       evaluation queries
-qrels/<split>.tsv   graded query-document relevance judgments
-```
-
-When limits are supplied, the sampler selects queries first, retains every
-positively judged document for those queries, and fills the remaining document
-budget deterministically. This is important. Independently sampling documents
-would remove ground-truth positives and make retrieval scores misleading.
-
-Each run records:
-
-- Dataset, split, retriever, model, cutoffs, sample limits, and random seed
-- Document, query, and positive-judgment counts
-- All retrieval metrics
-- Timing and Python version
-
-## Commands
-
-```text
-rag-eval [-h]
-  [--dataset DATASET]
-  [--split SPLIT]
-  [--data-dir DATA_DIR]
-  [--output-dir OUTPUT_DIR]
-  [--retriever {bm25,dense,hybrid}]
-  [--model MODEL]
-  [--batch-size BATCH_SIZE]
-  [--k 1,3,5,10]
-  [--max-documents N]
-  [--max-queries N]
-  [--seed SEED]
-```
-
-Use `--max-documents` only as a learning shortcut. Scores from a sampled corpus
-are not directly comparable with published full-corpus BEIR results.
-
 ## Test
 
 ```bash
@@ -780,36 +681,27 @@ Suggested record:
 **Deliverable:** a versioned, validated benchmark dataset with a frozen held-out
 test split.
 
-### Phase 2. Establish retrieval baselines
+### Phase 2. Establish QASPER retrieval baselines
 
-Detailed execution contract: [SciDocs Retrieval Benchmark Specification](benchmark_spec.md).
+Detailed execution contract: [QASPER RAG Benchmark Specification](benchmark_spec.md).
 
-- [x] Implement BM25, dense, and hybrid retrieval.
-- [x] Implement Precision@K, Recall@K, MRR@K, and NDCG@K.
-- [x] Record total retrieval time, time per query, configuration, sample size, and
-  Python version.
-- [x] Run BM25 on a fixed development sample and save it as the lexical baseline.
-- [x] Run dense and hybrid retrieval on the identical queries, corpus, K values,
-  and seed.
-- [x] Add warm-up runs and report p50, p95, and p99 latency separately from index
-  construction time.
-- [ ] Record embedding cost, query cost, peak memory, and on-disk index size.
-- [x] Save ranked passage IDs and scores for every query, not only aggregate
-  metrics.
-- [ ] Report bootstrap confidence intervals and per-slice results in addition to
-  macro averages.
-- [ ] Inspect false negatives from the worst queries and classify causes such as
-  vocabulary mismatch, bad chunk boundaries, metadata filtering, multi-hop
-  evidence, or stale content.
-- [x] Repeat the selected configuration on the full corpus before reporting final
-  retrieval results.
+- [x] Implement BM25, dense, and hybrid passage retrieval.
+- [x] Freeze paper-scoped and corpus-scoped context manifests independently from
+  generation.
+- [x] Evaluate Hit@K, best-reference Recall@K, complete-reference-set
+  availability, MRR@K, Precision@K, and NDCG@K against QASPER evidence.
+- [x] Select hybrid MiniLM plus BM25 RRF at paper scope and top 5 on validation.
+- [x] Persist ranked passage IDs, scores, source checksums, and retrieval
+  parameters.
+- [ ] Add confidence intervals, per-slice reporting, and retrieval error analysis.
+- [ ] Freeze product thresholds before inspecting the held-out test split.
 
-**Exit gate:** the selected retriever meets the agreed `Recall@K`, tail-latency,
-cost, memory, and index-size thresholds on the held-out set.
+**Exit gate:** the selected retriever meets the frozen evidence-availability,
+ranking, latency, and resource thresholds on the held-out set.
 
 ### Phase 3. Evaluate generation with fixed context
 
-Detailed execution contract: [Phase 3 fixed-context generation specification](benchmark_spec.md#16-phase-3-purpose-and-diagnostic-boundary).
+Detailed execution contract: [Phase 3 fixed-context generation specification](benchmark_spec.md#1-purpose-and-diagnostic-boundary).
 
 - [x] Use QASPER questions, answers, evidence, and answerability annotations.
 - [x] Normalize QASPER into checksummed, versioned generation cases.
