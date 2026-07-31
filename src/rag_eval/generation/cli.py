@@ -9,7 +9,6 @@ from collections import Counter
 from pathlib import Path
 
 from ..cli.common import OPENAI_MODEL_IDS, _build_adapter
-from ..end_to_end.workflow import run_retrieved_context_generation
 from .comparison import (
     compare_evaluated_runs,
     compare_response_validity,
@@ -91,43 +90,26 @@ def _execute_generation(
     args: argparse.Namespace,
     *,
     track: str,
-    context_manifest: str | None = None,
 ) -> int:
+    if track == "retrieved-context":
+        raise ValueError("Retrieved-context execution belongs to rag_eval.end_to_end")
     cases_path = Path(args.cases_file)
     adapter = _build_adapter(args)
-    if track == "retrieved-context":
-        if not context_manifest:
-            raise ValueError("--context-manifest is required for retrieved-context")
-        counts = run_retrieved_context_generation(
-            cases_file=cases_path,
-            context_manifest_file=Path(context_manifest),
-            adapter=adapter,
-            output_file=Path(args.output_file),
-            max_context_tokens=args.max_context_tokens,
-            max_output_tokens=args.max_output_tokens,
-            max_cases=getattr(args, "max_cases", None),
-            resume=args.resume,
-        )
-    else:
-        counts = run_generation_cases(
-            _load_cases(cases_path),
-            adapter=adapter,
-            track=track,
-            output_file=Path(args.output_file),
-            max_context_tokens=args.max_context_tokens,
-            max_output_tokens=args.max_output_tokens,
-            max_cases=getattr(args, "max_cases", None),
-            resume=args.resume,
-        )
+    counts = run_generation_cases(
+        _load_cases(cases_path),
+        adapter=adapter,
+        track=track,
+        output_file=Path(args.output_file),
+        max_context_tokens=args.max_context_tokens,
+        max_output_tokens=args.max_output_tokens,
+        max_cases=getattr(args, "max_cases", None),
+        resume=args.resume,
+    )
     print(json.dumps(counts, indent=2, sort_keys=True))
     return 1 if counts["errors"] else 0
 
 def _run(args: argparse.Namespace) -> int:
-    return _execute_generation(
-        args,
-        track=args.track,
-        context_manifest=args.context_manifest,
-    )
+    return _execute_generation(args, track=args.track)
 
 def _generate_oracle(args: argparse.Namespace) -> int:
     return _execute_generation(args, track="oracle-evidence")

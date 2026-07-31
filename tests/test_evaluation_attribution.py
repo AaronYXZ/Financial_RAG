@@ -1,4 +1,4 @@
-from rag_eval.end_to_end.attribution import (
+from rag_eval.evaluation.attribution import (
     aggregate_failure_attribution,
     classify_failure_attribution,
 )

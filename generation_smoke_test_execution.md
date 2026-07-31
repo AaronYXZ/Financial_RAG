@@ -519,7 +519,8 @@ The console-script wrapper consumes that integer as the process exit status.
 | Case loop, eligibility, persistence, resume | [`src/rag_eval/generation/runner.py`](src/rag_eval/generation/runner.py) |
 | Deterministic generation metrics | [`src/rag_eval/generation/metrics.py`](src/rag_eval/generation/metrics.py) |
 | Retrieved-context and retrieve-then-generate orchestration | [`src/rag_eval/end_to_end/workflow.py`](src/rag_eval/end_to_end/workflow.py) |
-| Retrieval-versus-generation failure attribution | [`src/rag_eval/end_to_end/attribution.py`](src/rag_eval/end_to_end/attribution.py) |
+| Shared retrieval-versus-generation failure attribution | [`src/rag_eval/evaluation/attribution.py`](src/rag_eval/evaluation/attribution.py) |
+| Shared eligibility-manifest validation | [`src/rag_eval/evaluation/manifests.py`](src/rag_eval/evaluation/manifests.py) |
 | Blinded judge prompt, schema, and parsing contracts | [`src/rag_eval/semantic/contracts.py`](src/rag_eval/semantic/contracts.py) |
 | Semantic input preparation, execution, and aggregation | [`src/rag_eval/semantic/evaluation.py`](src/rag_eval/semantic/evaluation.py) |
 | Stable command façade | [`src/rag_eval/generation_cli.py`](src/rag_eval/generation_cli.py) |

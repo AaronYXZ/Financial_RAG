@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..generation.data import load_generation_cases
-from ..generation.metrics import load_eligibility_manifest
+from ..evaluation.manifests import load_eligibility_manifest
 from .context import (
     RetrievalMethod,
     RetrievalScope,

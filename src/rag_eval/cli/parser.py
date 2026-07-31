@@ -13,7 +13,6 @@ from ..generation.cli import (
     _intersect_eligibility,
     _metrics,
     _prepare,
-    _run,
 )
 from ..generation.data import QASPER_PARQUET_REVISION
 from ..retrieval.cli import (
@@ -28,6 +27,7 @@ from .common import (
     _add_generation_arguments,
     _add_provider_arguments,
 )
+from .router import _run
 
 
 def build_parser() -> argparse.ArgumentParser:

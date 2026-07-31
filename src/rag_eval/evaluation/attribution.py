@@ -1,4 +1,4 @@
-"""Deterministic attribution across retrieval and generation."""
+"""Deterministic attribution shared across evaluation tracks."""
 
 from __future__ import annotations
 

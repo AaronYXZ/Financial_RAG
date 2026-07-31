@@ -273,6 +273,7 @@ def test_retrieved_context_is_a_supported_track():
 
     assert args.track == "retrieved-context"
     assert args.context_manifest == "frozen.json"
+    assert args.handler.__module__ == "rag_eval.cli.router"
 
 
 def test_generate_oracle_has_task_specific_defaults():

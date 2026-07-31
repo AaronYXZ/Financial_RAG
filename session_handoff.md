@@ -299,8 +299,10 @@ quota-confounded and non-selectable. The held-out test remains untouched.
 - `src/rag_eval/generation/metrics.py`. Deterministic generation metrics.
 - `src/rag_eval/end_to_end/workflow.py`. Frozen-retrieval and end-to-end
   workflow composition.
-- `src/rag_eval/end_to_end/attribution.py`. Deterministic retrieval-versus-
-  generation failure attribution.
+- `src/rag_eval/evaluation/attribution.py`. Shared deterministic
+  retrieval-versus-generation failure attribution.
+- `src/rag_eval/evaluation/manifests.py`. Shared eligibility-manifest
+  validation.
 - `src/rag_eval/semantic/contracts.py`. Blinded judge prompt, schema, hashing,
   and parsing contracts.
 - `src/rag_eval/semantic/evaluation.py`. Semantic input preparation, execution,

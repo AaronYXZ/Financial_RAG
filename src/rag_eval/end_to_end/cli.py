@@ -7,16 +7,22 @@ import json
 from pathlib import Path
 
 from ..cli.common import _build_adapter
-from ..generation.cli import _execute_generation
-from .workflow import run_retrieve_then_generate
+from .workflow import run_retrieved_context_generation, run_retrieve_then_generate
 
 
 def _generate_retrieved(args: argparse.Namespace) -> int:
-    return _execute_generation(
-        args,
-        track="retrieved-context",
-        context_manifest=args.context_manifest,
+    counts = run_retrieved_context_generation(
+        cases_file=Path(args.cases_file),
+        context_manifest_file=Path(args.context_manifest),
+        adapter=_build_adapter(args),
+        output_file=Path(args.output_file),
+        max_context_tokens=args.max_context_tokens,
+        max_output_tokens=args.max_output_tokens,
+        max_cases=getattr(args, "max_cases", None),
+        resume=args.resume,
     )
+    print(json.dumps(counts, indent=2, sort_keys=True))
+    return 1 if counts["errors"] else 0
 
 def _generate_end_to_end(args: argparse.Namespace) -> int:
     context_manifest = Path(args.context_manifest)

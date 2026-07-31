@@ -9,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from ..evaluation.manifests import load_eligibility_manifest
 from .metrics import (
     BOOTSTRAP_CONFIDENCE_LEVEL,
     BOOTSTRAP_RESAMPLES,
@@ -16,7 +17,6 @@ from .metrics import (
     EVALUATION_STATUSES,
     bootstrap_point_estimates,
     classify_prediction_status,
-    load_eligibility_manifest,
     load_prediction_rows,
 )
 
